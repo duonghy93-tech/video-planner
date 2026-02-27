@@ -1981,14 +1981,31 @@ function renderRoadmap() {
                                 ${video.hashtags?.length ? `<div style="margin-top:4px;font-size:0.75rem;color:var(--accent-purple)">${video.hashtags.join(' ')}</div>` : ''}
                                 ${video.metrics ? `<div style="margin-top:6px;display:flex;gap:12px;font-size:0.8rem;color:#10b981"><span>\ud83d\udc41 ${(video.metrics.views || 0).toLocaleString()}</span><span>\u2764\ufe0f ${(video.metrics.likes || 0).toLocaleString()}</span><span>\ud83d\udcac ${(video.metrics.comments || 0).toLocaleString()}</span></div>` : ''}
                             </div>
-                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;min-width:140px">
+                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;min-width:180px">
                                 ${statusBadge}
                                 <select onchange="updateVideoStatus('${rm.id}', ${day.day}, ${video.slot}, this.value)" style="font-size:0.7rem;padding:2px 6px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:4px;color:var(--text-primary)">
                                     <option value="pending" ${status === 'pending' ? 'selected' : ''}>Ch\u01b0a l\u00e0m</option>
                                     <option value="done" ${status === 'done' ? 'selected' : ''}>\u0110\u00e3 l\u00e0m</option>
                                     <option value="published" ${status === 'published' ? 'selected' : ''}>\u0110\u00e3 \u0111\u0103ng</option>
                                 </select>
-                                <div style="display:flex;gap:2px;margin-top:2px"><input type="text" id="scan_${day.day}_${video.slot}" placeholder="URL \u0111\u00e3 \u0111\u0103ng" value="${video.publishedUrl || ''}" style="font-size:0.65rem;padding:2px 4px;width:90px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:3px;color:var(--text-primary)"><button class="btn-ghost btn-sm" onclick="scanPublishedVideo('${rm.id}',${day.day},${video.slot})" style="font-size:0.65rem">\ud83d\udd0d</button></div>
+                                <div style="display:grid;gap:2px;margin-top:4px;width:100%">
+                                    ${['youtube', 'tiktok', 'facebook', 'instagram'].map(p => {
+                        const icons = { youtube: '\ud83c\udfac', tiktok: '\ud83c\udfb5', facebook: '\ud83d\udcd8', instagram: '\ud83d\udcf8' };
+                        const urls = video.publishedUrls || {};
+                        const oldUrl = !video.publishedUrls && video.publishedUrl && p === 'youtube' ? video.publishedUrl : '';
+                        return `<div style="display:flex;gap:2px;align-items:center">
+                                            <span style="font-size:0.6rem;width:14px">${icons[p]}</span>
+                                            <input type="text" id="scan_${day.day}_${video.slot}_${p}" placeholder="${p}" value="${urls[p] || oldUrl}" style="font-size:0.6rem;padding:1px 3px;flex:1;background:var(--bg-input);border:1px solid var(--border-light);border-radius:3px;color:var(--text-primary)">
+                                            <button class="btn-ghost" onclick="scanPlatformVideo('${rm.id}',${day.day},${video.slot},'${p}')" style="font-size:0.55rem;padding:0 2px">\ud83d\udd0d</button>
+                                        </div>`;
+                    }).join('')}
+                                </div>
+                                ${video.metrics ? `<div style="margin-top:4px;font-size:0.65rem;color:#10b981">` +
+                            Object.entries(video.metrics).filter(([k]) => ['youtube', 'tiktok', 'facebook', 'instagram'].includes(k)).map(([p, m]) =>
+                                `<div>${p}: ${(m.views || 0).toLocaleString()}👁 ${(m.likes || 0).toLocaleString()}❤️</div>`
+                            ).join('') +
+                            (video.metrics.views !== undefined ? `<div>Total: ${(video.metrics.views || 0).toLocaleString()}👁</div>` : '') +
+                            `</div>` : ''}
                             </div>
                         </div>
                     </div>`;
@@ -2206,6 +2223,39 @@ async function scanPublishedVideo(roadmapId, day, slot) {
         showToast(`\u2705 ${data.metrics.title}: ${(data.metrics.views || 0).toLocaleString()} views, ${(data.metrics.likes || 0).toLocaleString()} likes`);
 
         // Reload roadmap to show updated metrics
+        if (currentRoadmapChannelId) {
+            const rmRes = await fetch('/api/roadmaps/' + currentRoadmapChannelId, {
+                headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+            });
+            const roadmaps = await rmRes.json();
+            if (roadmaps.length > 0) {
+                currentRoadmap = roadmaps[0];
+                renderRoadmap();
+            }
+        }
+    } catch (err) {
+        showToast('\u274c ' + err.message);
+    }
+}
+
+async function scanPlatformVideo(roadmapId, day, slot, platform) {
+    const input = document.getElementById(`scan_${day}_${slot}_${platform}`);
+    const url = input?.value?.trim();
+    if (!url) { showToast('\u26a0\ufe0f Paste URL ' + platform); return; }
+
+    showToast('\ud83d\udd0d \u0110ang qu\u00e9t ' + platform + '...');
+    try {
+        const res = await fetch('/api/scan-published', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ url, roadmapId, day, slot, platform })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showToast(`\u2705 ${platform}: ${(data.metrics.views || 0).toLocaleString()} views`);
+
+        // Reload roadmap
         if (currentRoadmapChannelId) {
             const rmRes = await fetch('/api/roadmaps/' + currentRoadmapChannelId, {
                 headers: { 'Authorization': 'Bearer ' + getAuthToken() }

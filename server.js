@@ -460,7 +460,7 @@ app.post('/api/roadmaps/:id/next', auth.authMiddleware, async (req, res) => {
 // ============ SCAN PUBLISHED VIDEO (Phase 4) ============
 app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
     try {
-        const { url, roadmapId, day, slot } = req.body;
+        const { url, roadmapId, day, slot, platform } = req.body;
         if (!url) return res.status(400).json({ error: 'Thiếu URL video' });
 
         // Use yt-dlp to get metadata
@@ -505,8 +505,15 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
                 const dayObj = rm.days?.find(d => d.day === parseInt(day));
                 const video = dayObj?.videos?.find(v => v.slot === parseInt(slot));
                 if (video) {
-                    video.metrics = metrics;
-                    video.publishedUrl = url;
+                    if (platform) {
+                        if (!video.publishedUrls) video.publishedUrls = {};
+                        video.publishedUrls[platform] = url;
+                        if (!video.metrics) video.metrics = {};
+                        video.metrics[platform] = metrics;
+                    } else {
+                        video.metrics = metrics;
+                        video.publishedUrl = url;
+                    }
                     video.status = 'published';
                     writeJsonFile(ROADMAPS_FILE, roadmaps);
                 }
@@ -554,23 +561,33 @@ async function autoScanAllPublished() {
         for (const day of rm.days) {
             if (!day.videos) continue;
             for (const video of day.videos) {
-                if (!video.publishedUrl || video.status !== 'published') continue;
+                if (video.status !== 'published') continue;
 
-                const metrics = await scanSingleUrl(video.publishedUrl);
-                if (metrics) {
-                    // Save history
-                    if (!video.metricsHistory) video.metricsHistory = [];
-                    if (video.metrics) video.metricsHistory.push(video.metrics);
-                    // Keep max 30 history entries
-                    if (video.metricsHistory.length > 30) video.metricsHistory = video.metricsHistory.slice(-30);
-                    video.metrics = metrics;
-                    scanned++;
-                } else {
-                    failed++;
+                // Scan multi-platform URLs
+                if (video.publishedUrls) {
+                    for (const [platform, pUrl] of Object.entries(video.publishedUrls)) {
+                        if (!pUrl) continue;
+                        const m = await scanSingleUrl(pUrl);
+                        if (m) {
+                            if (!video.metrics) video.metrics = {};
+                            video.metrics[platform] = m;
+                            scanned++;
+                        } else { failed++; }
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
                 }
-
-                // Rate limit: wait 2s between scans
-                await new Promise(r => setTimeout(r, 2000));
+                // Legacy single URL
+                else if (video.publishedUrl) {
+                    const m = await scanSingleUrl(video.publishedUrl);
+                    if (m) {
+                        if (!video.metricsHistory) video.metricsHistory = [];
+                        if (video.metrics && video.metrics.scannedAt) video.metricsHistory.push(video.metrics);
+                        if (video.metricsHistory.length > 30) video.metricsHistory = video.metricsHistory.slice(-30);
+                        video.metrics = m;
+                        scanned++;
+                    } else { failed++; }
+                    await new Promise(r => setTimeout(r, 2000));
+                }
             }
         }
     }
