@@ -23,6 +23,51 @@ function getYtdlpCmd() {
     } catch (e) { return null; }
 }
 
+// YouTube Data API v3 — for cloud scanning (no IP blocking)
+async function scanYouTubeAPI(url) {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) return null;
+
+    // Extract video ID from URL
+    let videoId = null;
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/
+    ];
+    for (const p of patterns) {
+        const m = url.match(p);
+        if (m) { videoId = m[1]; break; }
+    }
+    if (!videoId) return null;
+
+    try {
+        const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet,contentDetails&id=${videoId}&key=${apiKey}`;
+        const res = await new Promise((resolve, reject) => {
+            https.get(apiUrl, (resp) => {
+                let data = '';
+                resp.on('data', chunk => data += chunk);
+                resp.on('end', () => {
+                    try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+                });
+            }).on('error', reject);
+        });
+
+        if (!res.items || res.items.length === 0) return null;
+        const item = res.items[0];
+        return {
+            views: parseInt(item.statistics.viewCount) || 0,
+            likes: parseInt(item.statistics.likeCount) || 0,
+            comments: parseInt(item.statistics.commentCount) || 0,
+            title: item.snippet.title || '',
+            duration: item.contentDetails.duration || '',
+            scannedAt: new Date().toISOString()
+        };
+    } catch (e) {
+        console.error('[YouTube API] Error:', e.message);
+        return null;
+    }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -465,39 +510,48 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
         const { url, roadmapId, day, slot, platform } = req.body;
         if (!url) return res.status(400).json({ error: 'Thiếu URL video' });
 
-        // Use yt-dlp to get metadata
-        const ytdlpPath = getYtdlpCmd();
-        if (!ytdlpPath) {
-            return res.status(400).json({ error: 'yt-dlp không tìm thấy. Cài đặt: pip install yt-dlp' });
+        console.log(`🔍 Scanning: ${url} (${platform || 'default'})`);
+
+        let metrics = null;
+        const isYouTube = /youtube\.com|youtu\.be/i.test(url);
+
+        // Try YouTube Data API first (cloud-friendly)
+        if (isYouTube) {
+            metrics = await scanYouTubeAPI(url);
+            if (metrics) console.log('[YouTube API] ✅ Success');
         }
 
-        console.log(`🔍 Scanning: ${url}`);
-
-        const metadata = await new Promise((resolve, reject) => {
-            execFile(ytdlpPath, [
-                '--dump-json',
-                '--no-download',
-                url
-            ], { timeout: 30000 }, (err, stdout) => {
-                if (err) return reject(new Error('Không thể lấy metadata: ' + err.message));
+        // Fallback to yt-dlp
+        if (!metrics) {
+            const ytdlpPath = getYtdlpCmd();
+            if (ytdlpPath) {
                 try {
-                    resolve(JSON.parse(stdout));
+                    const metadata = await new Promise((resolve, reject) => {
+                        execFile(ytdlpPath, ['--dump-json', '--no-download', url],
+                            { timeout: 30000 }, (err, stdout) => {
+                                if (err) return reject(err);
+                                try { resolve(JSON.parse(stdout)); } catch (e) { reject(e); }
+                            });
+                    });
+                    metrics = {
+                        views: metadata.view_count || 0,
+                        likes: metadata.like_count || 0,
+                        comments: metadata.comment_count || 0,
+                        duration: metadata.duration || 0,
+                        title: metadata.title || '',
+                        scannedAt: new Date().toISOString()
+                    };
                 } catch (e) {
-                    reject(new Error('Lỗi parse metadata'));
+                    console.error('[yt-dlp] Failed:', e.message?.substring(0, 100));
                 }
-            });
-        });
+            }
+        }
 
-        const metrics = {
-            views: metadata.view_count || 0,
-            likes: metadata.like_count || 0,
-            comments: metadata.comment_count || 0,
-            duration: metadata.duration || 0,
-            title: metadata.title || '',
-            uploadDate: metadata.upload_date || '',
-            channel: metadata.uploader || '',
-            scannedAt: new Date().toISOString()
-        };
+        if (!metrics) {
+            let msg = 'Không thể quét video';
+            if (isYouTube && !process.env.YOUTUBE_API_KEY) msg = 'Thêm YOUTUBE_API_KEY vào env để quét YouTube';
+            return res.status(500).json({ error: msg });
+        }
 
         // Save metrics to roadmap if provided
         if (roadmapId && day && slot) {
@@ -537,6 +591,13 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
 
 // ============ AUTO-SCAN SCHEDULER ============
 async function scanSingleUrl(url) {
+    // Try YouTube API first for YouTube URLs
+    const isYouTube = /youtube\.com|youtu\.be/i.test(url);
+    if (isYouTube) {
+        const apiResult = await scanYouTubeAPI(url);
+        if (apiResult) return apiResult;
+    }
+
     const ytdlpPath = getYtdlpCmd();
     if (!ytdlpPath) return null;
 
@@ -1249,6 +1310,12 @@ app.listen(PORT, () => {
         console.log('⚠️  API Key chưa cấu hình — click nút trên giao diện để nhập\n');
     } else {
         console.log('✅ Gemini API Key loaded from .env\n');
+    }
+
+    if (process.env.YOUTUBE_API_KEY) {
+        console.log('✅ YouTube Data API Key loaded — scan YouTube trên cloud OK\n');
+    } else {
+        console.log('⚠️  YouTube API Key chưa cấu hình — scan YouTube chỉ dùng yt-dlp\n');
     }
 
     // Check yt-dlp
