@@ -597,10 +597,34 @@ async function autoScanAllPublished() {
     return { scanned, failed };
 }
 
-// Schedule auto-scan every 12 hours
-const SCAN_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours
-setInterval(() => autoScanAllPublished(), SCAN_INTERVAL);
-console.log('\u23f0 Auto-scan: m\u1ed7i 12 gi\u1edd s\u1ebd qu\u00e9t t\u1ea5t c\u1ea3 video \u0111\u00e3 \u0111\u0103ng');
+// Schedule auto-scan at 9:00 AM and 9:00 PM (UTC+7 Vietnam time)
+function scheduleNextScan() {
+    const now = new Date();
+    const vnOffset = 7 * 60; // UTC+7
+    const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const vnNow = new Date(utcMs + (vnOffset * 60000));
+
+    const h = vnNow.getHours();
+    let nextHour;
+    if (h < 9) nextHour = 9;
+    else if (h < 21) nextHour = 21;
+    else nextHour = 9; // next day
+
+    const nextScan = new Date(vnNow);
+    nextScan.setHours(nextHour, 0, 0, 0);
+    if (nextHour <= h) nextScan.setDate(nextScan.getDate() + 1);
+
+    // Convert back to local time
+    const delayMs = nextScan.getTime() - vnNow.getTime();
+
+    console.log(`\u23f0 Auto-scan ti\u1ebfp theo l\u00fac ${nextHour}:00 (VN) — c\u00f2n ${Math.round(delayMs / 60000)} ph\u00fat`);
+
+    setTimeout(async () => {
+        await autoScanAllPublished();
+        scheduleNextScan(); // schedule next one
+    }, delayMs);
+}
+scheduleNextScan();
 
 // Admin: manual trigger auto-scan
 app.post('/api/admin/auto-scan', auth.authMiddleware, async (req, res) => {
