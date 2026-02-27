@@ -1673,7 +1673,7 @@ function renderChannelList() {
         <div class="dna-card" style="margin-bottom:16px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start">
                 <div>
-                    <h3 style="margin:0">📺 ${ch.name}</h3>
+                    <h3 style="margin:0;cursor:pointer" onclick="viewChannelDetail('${ch.id}', false)">📺 ${ch.name}</h3>
                     <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:4px">
                         ${ch.niche ? `<span style="margin-right:12px">🏷️ ${ch.niche}</span>` : ''}
                         <span style="margin-right:12px">${ch.language === 'VN' ? '🇻🇳' : '🇺🇸'} ${ch.language}</span>
@@ -1685,6 +1685,7 @@ function renderChannelList() {
                 </div>
                 <div style="display:flex;gap:8px">
                     <button class="btn-primary btn-sm" onclick="generateRoadmap('${ch.id}')" title="Tạo Roadmap">🗓️ Roadmap</button>
+                    <button class="btn-ghost btn-sm" onclick="editChannel('${ch.id}')" title="Sửa kênh">✏️</button>
                     <button class="btn-ghost btn-danger btn-sm" onclick="deleteChannel('${ch.id}')" title="Xóa kênh">🗑️</button>
                 </div>
             </div>
@@ -2092,7 +2093,7 @@ async function loadAdminDashboard() {
                     chListEl.innerHTML = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 k\u00eanh n\u00e0o</p>';
                 } else {
                     chListEl.innerHTML = channels.map(c => `
-                        <div class="dna-card" style="margin-bottom:8px">
+                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="viewChannelDetail('${c.id}', true)">
                             <div style="display:flex;justify-content:space-between">
                                 <div>
                                     <strong>\ud83d\udcfa ${c.name}</strong>
@@ -2210,4 +2211,126 @@ async function scanPublishedVideo(roadmapId, day, slot) {
     } catch (err) {
         showToast('\u274c ' + err.message);
     }
+}
+
+// ============ CHANNEL EDIT & DETAIL ============
+let editingChannelId = null;
+
+function editChannel(id) {
+    const ch = myChannels.find(c => c.id === id);
+    if (!ch) return;
+    editingChannelId = id;
+    document.getElementById('chName').value = ch.name || '';
+    document.getElementById('chNiche').value = ch.niche || '';
+    document.getElementById('chDescription').value = ch.description || '';
+    document.getElementById('chYoutube').value = ch.socialLinks?.youtube || '';
+    document.getElementById('chTiktok').value = ch.socialLinks?.tiktok || '';
+    document.getElementById('chFacebook').value = ch.socialLinks?.facebook || '';
+    document.getElementById('chLanguage').value = ch.language || 'US';
+    document.getElementById('chPostsPerDay').value = ch.postsPerDay || 2;
+    if (document.getElementById('chPreset')) document.getElementById('chPreset').value = ch.presetId || '';
+
+    const btn = document.getElementById('btnCreateChannel');
+    if (btn) { btn.innerHTML = '\u2705 C\u1eadp Nh\u1eadt K\u00eanh'; btn.setAttribute('onclick', 'updateChannel()'); }
+    document.getElementById('chName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast('\u270f\ufe0f \u0110ang s\u1eeda k\u00eanh: ' + ch.name);
+}
+
+async function updateChannel() {
+    if (!editingChannelId) return;
+    const channel = {
+        name: document.getElementById('chName')?.value.trim(),
+        niche: document.getElementById('chNiche')?.value.trim() || '',
+        description: document.getElementById('chDescription')?.value.trim() || '',
+        socialLinks: {
+            youtube: document.getElementById('chYoutube')?.value.trim() || '',
+            tiktok: document.getElementById('chTiktok')?.value.trim() || '',
+            facebook: document.getElementById('chFacebook')?.value.trim() || ''
+        },
+        language: document.getElementById('chLanguage')?.value || 'US',
+        postsPerDay: parseInt(document.getElementById('chPostsPerDay')?.value) || 2,
+        presetId: document.getElementById('chPreset')?.value || null
+    };
+    if (!channel.name) { showToast('\u26a0\ufe0f Nh\u1eadp t\u00ean k\u00eanh'); return; }
+    try {
+        const res = await fetch('/api/channels/' + editingChannelId, { method: 'PUT', headers: getApiHeaders(), body: JSON.stringify(channel) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast('\u2705 \u0110\u00e3 c\u1eadp nh\u1eadt k\u00eanh');
+        cancelEdit();
+        await loadMyChannels();
+    } catch (err) { showToast('\u274c ' + err.message); }
+}
+
+function cancelEdit() {
+    editingChannelId = null;
+    ['chName', 'chNiche', 'chDescription', 'chYoutube', 'chTiktok', 'chFacebook'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    const btn = document.getElementById('btnCreateChannel');
+    if (btn) { btn.innerHTML = '\ud83d\udcfa T\u1ea1o K\u00eanh'; btn.setAttribute('onclick', 'createChannel()'); }
+}
+
+async function viewChannelDetail(id, isAdmin) {
+    try {
+        const url = isAdmin ? '/api/admin/channels/' + id : '/api/channels/' + id;
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) throw new Error('Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c');
+        const data = await res.json();
+        const ch = data.channel;
+        const rms = data.roadmaps || [];
+
+        let briefHtml = '';
+        if (ch.brief) {
+            briefHtml = `<div class="dna-card" style="margin-top:12px;background:rgba(16,185,129,0.05)">
+                <h4 style="margin:0 0 8px">\ud83d\udccb Chi\u1ebfn L\u01b0\u1ee3c K\u00eanh</h4>
+                <div style="font-size:0.85rem;color:var(--text-secondary);display:grid;gap:6px">
+                    ${ch.brief.target_audience ? `<div>\ud83c\udfaf <strong>\u0110\u1ed1i t\u01b0\u1ee3ng:</strong> ${ch.brief.target_audience}</div>` : ''}
+                    ${ch.brief.tone ? `<div>\ud83c\udfa4 <strong>Tone:</strong> ${ch.brief.tone}</div>` : ''}
+                    ${ch.brief.products ? `<div>\ud83d\udcb0 <strong>S\u1ea3n ph\u1ea9m:</strong> ${ch.brief.products}</div>` : ''}
+                    ${ch.brief.competitors ? `<div>\ud83c\udfc6 <strong>\u0110\u1ed1i th\u1ee7:</strong> ${ch.brief.competitors}</div>` : ''}
+                    ${ch.brief.content_pillars?.length ? `<div>\ud83d\udccc <strong>N\u1ed9i dung ch\u00ednh:</strong> ${ch.brief.content_pillars.join(', ')}</div>` : ''}
+                    ${ch.brief.cta_strategy ? `<div>\ud83d\udce3 <strong>CTA:</strong> ${ch.brief.cta_strategy}</div>` : ''}
+                    ${ch.brief.dos_and_donts ? `<div>\u26a0\ufe0f <strong>L\u01b0u \u00fd:</strong> ${ch.brief.dos_and_donts}</div>` : ''}
+                </div>
+            </div>`;
+        }
+
+        let socialHtml = '';
+        if (ch.socialLinks) {
+            const links = [];
+            if (ch.socialLinks.youtube) links.push(`<a href="${ch.socialLinks.youtube}" target="_blank" style="color:#f87171">\ud83c\udfac YouTube</a>`);
+            if (ch.socialLinks.tiktok) links.push(`<a href="${ch.socialLinks.tiktok}" target="_blank" style="color:#06b6d4">\ud83c\udfb5 TikTok</a>`);
+            if (ch.socialLinks.facebook) links.push(`<a href="${ch.socialLinks.facebook}" target="_blank" style="color:#60a5fa">\ud83d\udcd8 Facebook</a>`);
+            if (links.length) socialHtml = `<div style="margin-top:8px;display:flex;gap:16px">${links.join('')}</div>`;
+        }
+
+        let roadmapsHtml = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 roadmap</p>';
+        if (rms.length) {
+            roadmapsHtml = rms.map(r => {
+                const total = r.days?.reduce((s, d) => s + (d.videos?.length || 0), 0) || 0;
+                const done = r.days?.reduce((s, d) => s + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
+                return `<div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="document.getElementById('channelDetailModal').classList.remove('active');currentRoadmapChannelId='${ch.id}';currentRoadmap=${JSON.stringify(r).replace(/'/g, "\\'")}; renderRoadmap();">
+                    <div style="display:flex;justify-content:space-between">
+                        <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
+                        <span style="color:var(--text-secondary);font-size:0.8rem">${r.week_start || ''} \u2022 ${done}/${total} \u0111\u00e3 \u0111\u0103ng</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        document.getElementById('channelDetailTitle').textContent = '\ud83d\udcfa ' + ch.name;
+        document.getElementById('channelDetailBody').innerHTML = `
+            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;color:var(--text-secondary)">
+                ${ch.niche ? `<span>\ud83c\udff7\ufe0f ${ch.niche}</span>` : ''}
+                <span>${ch.language === 'VN' ? '\ud83c\uddfb\ud83c\uddf3 Ti\u1ebfng Vi\u1ec7t' : '\ud83c\uddfa\ud83c\uddf8 English (US)'}</span>
+                <span>\ud83d\udcc5 ${ch.postsPerDay} video/ng\u00e0y</span>
+                ${data.ownerName ? `<span>\ud83d\udc64 @${data.ownerName}</span>` : ''}
+            </div>
+            ${ch.description ? `<p style="margin-top:10px;color:var(--text-secondary);font-size:0.9rem">${ch.description}</p>` : ''}
+            ${socialHtml}
+            ${briefHtml}
+            <h4 style="margin:20px 0 10px">\ud83d\uddd3\ufe0f Roadmaps (${rms.length})</h4>
+            ${roadmapsHtml}
+        `;
+        document.getElementById('channelDetailModal').classList.add('active');
+    } catch (err) { showToast('\u274c ' + err.message); }
 }

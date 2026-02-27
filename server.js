@@ -253,6 +253,54 @@ app.put('/api/channels/:id', auth.authMiddleware, (req, res) => {
     }
 });
 
+
+// GET single channel detail (with roadmaps)
+app.get('/api/channels/:id', auth.authMiddleware, (req, res) => {
+    try {
+        const channels = readJsonFile(CHANNELS_FILE);
+        const channel = channels.find(c => c.id === req.params.id && c.userId === req.user.id);
+        if (!channel) return res.status(404).json({ error: 'Không tìm thấy kênh' });
+        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        const channelRoadmaps = roadmaps.filter(r => r.channelId === channel.id);
+        res.json({ channel, roadmaps: channelRoadmaps });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// UPDATE channel
+app.put('/api/channels/:id', auth.authMiddleware, (req, res) => {
+    try {
+        const channels = readJsonFile(CHANNELS_FILE);
+        const idx = channels.findIndex(c => c.id === req.params.id && c.userId === req.user.id);
+        if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy kênh' });
+        const { name, niche, description, socialLinks, language, postsPerDay, presetId } = req.body;
+        if (name) channels[idx].name = name;
+        if (niche !== undefined) channels[idx].niche = niche;
+        if (description !== undefined) channels[idx].description = description;
+        if (socialLinks) channels[idx].socialLinks = socialLinks;
+        if (language) channels[idx].language = language;
+        if (postsPerDay) channels[idx].postsPerDay = postsPerDay;
+        if (presetId !== undefined) channels[idx].presetId = presetId;
+        channels[idx].updatedAt = new Date().toISOString();
+        writeJsonFile(CHANNELS_FILE, channels);
+        res.json({ success: true, channel: channels[idx] });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: GET any channel detail
+app.get('/api/admin/channels/:id', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    try {
+        const channels = readJsonFile(CHANNELS_FILE);
+        const channel = channels.find(c => c.id === req.params.id);
+        if (!channel) return res.status(404).json({ error: 'Không tìm thấy kênh' });
+        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        const channelRoadmaps = roadmaps.filter(r => r.channelId === channel.id);
+        const users = auth.getUsers();
+        const owner = users.find(u => u.id === channel.userId);
+        res.json({ channel, roadmaps: channelRoadmaps, ownerName: owner?.username || 'N/A' });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Delete channel
 app.delete('/api/channels/:id', auth.authMiddleware, (req, res) => {
     try {

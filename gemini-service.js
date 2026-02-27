@@ -659,7 +659,8 @@ Topics to cover (in order, skip if already answered):
 6. Content dos and don'ts (what to avoid, what to emphasize)
 
 RULES:
-- Ask in ${channel.language === 'VN' ? 'Vietnamese' : 'English'}
+- ALWAYS ask in Vietnamese (tiếng Việt) — employees are Vietnamese speakers
+- Channel language "${channel.language}" only affects the ROADMAP CONTENT, NOT this conversation
 - ONE question per response
 - Keep it short (2-3 sentences max)
 - After getting enough info (5+ exchanges), respond with ONLY a JSON block like:
@@ -676,9 +677,7 @@ RULES:
             { role: 'user', parts: [{ text: systemPrompt }] },
             {
                 role: 'model', parts: [{
-                    text: channel.language === 'VN'
-                        ? `Chào bạn! Tôi sẽ giúp bạn xây dựng chiến lược cho kênh "${channel.name}". Hãy bắt đầu nhé!`
-                        : `Hi! I'll help you build a strategy for "${channel.name}". Let's get started!`
+                    text: `Chào bạn! Tôi sẽ giúp bạn xây dựng chiến lược cho kênh "${channel.name}". Hãy bắt đầu nhé!`
                 }]
             },
             ...chatHistory
@@ -686,7 +685,7 @@ RULES:
     });
 
     const result = await chat.sendMessage(messages.length === 0
-        ? (channel.language === 'VN' ? 'Bắt đầu phỏng vấn đi' : 'Start the interview')
+        ? 'Bắt đầu phỏng vấn đi'
         : messages[messages.length - 1].content
     );
     const text = result.response.text();

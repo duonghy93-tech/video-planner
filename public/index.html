@@ -203,7 +203,7 @@
                             </select>
                         </div>
                     </div>
-                    <button class="btn-primary" onclick="createChannel()">📺 Tạo Kênh</button>
+                    <button class="btn-primary" id="btnCreateChannel" onclick="createChannel()">📺 Tạo Kênh</button>
                 </div>
 
                 <!-- Channel list -->
@@ -521,6 +521,19 @@ VD:
             </div>
         </div>
     </div>
+    <!-- Channel Detail Modal -->
+    <div class="modal-overlay" id="channelDetailModal">
+        <div class="modal modal-lg" style="max-width:700px;max-height:85vh;display:flex;flex-direction:column">
+            <div class="modal-header">
+                <h3 id="channelDetailTitle">📺 Chi Tiết Kênh</h3>
+                <button class="btn-ghost"
+                    onclick="document.getElementById('channelDetailModal').classList.remove('active')">✕</button>
+            </div>
+            <div class="modal-body" id="channelDetailBody" style="flex:1;overflow-y:auto;padding:20px">
+            </div>
+        </div>
+    </div>
+
     <!-- Strategy Chat Modal -->
     <div class="modal-overlay" id="strategyChatModal">
         <div class="modal modal-lg" style="max-width:600px;height:80vh;display:flex;flex-direction:column">
