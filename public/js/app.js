@@ -1916,6 +1916,17 @@ async function generateNewRoadmap(channelId, startDate, days = 7) {
     }
 }
 
+async function regenerateRoadmap(channelId) {
+    const daysInput = prompt('Số ngày Roadmap (7, 10, 14 hoặc nhập số khác):', '7');
+    if (!daysInput) return;
+    const days = parseInt(daysInput);
+    if (isNaN(days) || days < 1 || days > 30) {
+        showToast('⚠️ Nhập số từ 1-30');
+        return;
+    }
+    await generateNewRoadmap(channelId, null, days);
+}
+
 function renderRoadmap() {
     if (!currentRoadmap) return;
 
@@ -1933,7 +1944,7 @@ function renderRoadmap() {
             <span style="color:var(--text-secondary);font-size:0.85rem;margin-left:8px">${rm.channel || ''} \u2022 ${rm.week_start || ''}</span>
         </div>
         <div style="display:flex;gap:8px">
-            <button class="btn-primary btn-sm" onclick="generateNewRoadmap('${currentRoadmapChannelId}')">\ud83d\udd04 T\u1ea1o l\u1ea1i</button>
+            <button class="btn-primary btn-sm" onclick="regenerateRoadmap('${currentRoadmapChannelId}')">\ud83d\udd04 T\u1ea1o l\u1ea1i</button>
             <button class="btn-dna-save btn-sm" onclick="generateNextWeek()">\u27a1\ufe0f Tu\u1ea7n ti\u1ebfp theo</button>
         </div>
     </div>`;
