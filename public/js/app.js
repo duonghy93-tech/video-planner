@@ -553,47 +553,31 @@ function renderClipCard(clip, index) {
             </div>`;
     }
 
-    // 3 Reference Images
-    const refTypes = [
-        { key: 'ref_image_start', label: '🎬 Start (0-2s)', type: 'start' },
-        { key: 'ref_image_key', label: '⚡ Key (3-5s)', type: 'key' },
-        { key: 'ref_image_end', label: '🏁 End (6-8s)', type: 'end' }
-    ];
-
-    // Backward compat: if old format with single reference_image_prompt, show that
-    const hasNewFormat = clip.ref_image_start || clip.ref_image_key || clip.ref_image_end;
+    // Single Reference Image (opening frame for Veo3 extend)
+    const hasRefImage = clip.ref_image || clip.ref_image_start || clip.reference_image_prompt;
 
     let imagesHtml = '';
-    if (hasNewFormat) {
+    if (hasRefImage) {
         imagesHtml = `
-            <div class="clip-images-row">
-                ${refTypes.map(ref => `
-                    <div class="clip-ref-image" id="img-${clipId}-${ref.type}">
-                        <div class="ref-image-label">${ref.label}</div>
-                        <div class="clip-image-placeholder-sm">
-                            <button class="btn-generate-img-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, '${ref.type}')">
-                                ✨ Tạo
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            <div style="text-align:center;margin:8px 0">
-                <button class="btn-generate-img" onclick="handleGenerateAllRefImages('${clipId}', ${index})">
-                    ✨ Tạo cả 3 ảnh reference
-                </button>
+            <div class="clip-single-image" id="img-${clipId}">
+                <div class="clip-image-placeholder" style="aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--border-light);background:rgba(139,92,246,0.05)">
+                    <div style="font-size:1.5rem">🎬</div>
+                    <span style="font-size:0.75rem;color:var(--text-secondary)">Opening Frame (9:16)</span>
+                    <button class="btn-generate-img" onclick="handleGenerateRefImage('${clipId}', ${index}, 'start')" style="padding:8px 20px;font-size:0.85rem">
+                        ✨ Tạo ảnh khởi đầu
+                    </button>
+                </div>
             </div>`;
     } else {
-        // Old format fallback
         imagesHtml = `
             <div class="clip-image-container" id="img-${clipId}">
-                <div class="clip-image-placeholder">
+                <div class="clip-image-placeholder" style="aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--border-light)">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                         <circle cx="8.5" cy="8.5" r="1.5"/>
                         <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    <span>Chưa tạo ảnh</span>
+                    <span style="font-size:0.75rem">Chưa tạo ảnh</span>
                     <button class="btn-generate-img" onclick="handleGenerateSingleImage('${clipId}', ${index})">
                         ✨ Tạo ảnh reference
                     </button>
@@ -601,22 +585,14 @@ function renderClipCard(clip, index) {
             </div>`;
     }
 
-    // Image prompts display
+    // Image prompt display
     let promptsHtml = '';
-    if (hasNewFormat) {
-        promptsHtml = refTypes.map(ref => {
-            const prompt = clip[ref.key];
-            return prompt ? `
-                <div class="clip-section">
-                    <div class="clip-section-title">🖼️ ${ref.label}</div>
-                    <div class="clip-section-value">${prompt}</div>
-                </div>` : '';
-        }).join('');
-    } else if (clip.reference_image_prompt) {
+    const refPrompt = clip.ref_image || clip.ref_image_start || clip.reference_image_prompt;
+    if (refPrompt) {
         promptsHtml = `
             <div class="clip-section">
-                <div class="clip-section-title">🖼️ Image Prompt</div>
-                <div class="clip-section-value">${clip.reference_image_prompt}</div>
+                <div class="clip-section-title">🖼️ Image Prompt (Opening Frame)</div>
+                <div class="clip-section-value">${refPrompt}</div>
             </div>`;
     }
 
@@ -840,7 +816,7 @@ async function handleGenerateSingleImage(clipId, index) {
         </div>`;
 
     try {
-        const prompt = clip.reference_image_prompt || clip.ref_image_start || '';
+        const prompt = clip.ref_image || clip.reference_image_prompt || clip.ref_image_start || '';
         const res = await fetch('/api/generate-image', {
             method: 'POST',
             headers: getApiHeaders(),
@@ -888,27 +864,26 @@ async function handleGenerateRefImage(clipId, index, refType) {
     if (!currentPlan || !currentPlan.clips[index]) return;
 
     const clip = currentPlan.clips[index];
-    const refKey = `ref_image_${refType}`;
-    const prompt = clip[refKey];
+    // Single ref_image (new) or old ref_image_start/key/end
+    const prompt = clip.ref_image || clip[`ref_image_${refType}`];
     if (!prompt) {
-        showToast('⚠️ Không có prompt cho ảnh ' + refType);
+        showToast('⚠️ Không có prompt cho ảnh');
         return;
     }
 
-    const container = document.getElementById(`img-${clipId}-${refType}`);
-    const labelEl = container.querySelector('.ref-image-label');
-    const label = labelEl ? labelEl.outerHTML : '';
+    // Try single image container first, then old per-type containers
+    const container = document.getElementById(`img-${clipId}`) || document.getElementById(`img-${clipId}-${refType}`);
+    if (!container) return;
     const engine = document.getElementById('engineSelect')?.value ||
         document.getElementById('engineSelectVideo')?.value || 'imagen';
-    const aspectRatio = document.getElementById('aspectRatio')?.value ||
-        document.getElementById('aspectRatioVideo')?.value || '9:16';
+    const aspectRatio = '9:16'; // Always 9:16 for opening frames
 
     container.innerHTML = `
-        ${label}
-        <div class="clip-image-loading-sm">
+    container.innerHTML = `
+        < div style = "aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--border-light)" >
             <div class="mini-spinner"></div>
-            <span style="font-size:0.75rem;color:var(--text-muted)">Tạo ảnh...</span>
-        </div>`;
+            <span style="font-size:0.75rem;color:var(--text-muted)">Đang tạo ảnh 9:16...</span>
+        </div > `;
 
     try {
         const res = await fetch('/api/generate-image', {
@@ -916,7 +891,7 @@ async function handleGenerateRefImage(clipId, index, refType) {
             headers: getApiHeaders(),
             body: JSON.stringify({
                 prompt: prompt,
-                clipId: `${clipId}_${refType}`,
+                clipId: `${ clipId } _opening`,
                 engine: engine,
                 aspectRatio: aspectRatio,
                 projectDir: currentPlan._outputDir
@@ -928,22 +903,21 @@ async function handleGenerateRefImage(clipId, index, refType) {
 
         const imgSrc = data.imagePath;
         container.innerHTML = `
-            ${label}
-            <img src="${imgSrc}" alt="${clipId} ${refType}" loading="lazy" class="ref-img">
-            <div class="ref-img-actions">
-                <button class="btn-img-action-sm" onclick="downloadImage('${imgSrc}', '${clipId}_${refType}')" title="Tải">📥</button>
-                <button class="btn-img-action-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, '${refType}')" title="Tạo lại">🔄</button>
+        < img src = "${imgSrc}" alt = "${clipId}" loading = "lazy" style = "max-height:280px;border-radius:12px;object-fit:cover" >
+            <div style="display:flex;gap:6px;margin-top:4px;justify-content:center">
+                <button class="btn-img-action-sm" onclick="downloadImage('${imgSrc}', '${clipId}_opening')" title="Tải">📥 Tải</button>
+                <button class="btn-img-action-sm" onclick="handleUpscaleImage('${clipId}', ${index}, '${imgSrc}')" title="Upscale">🔍 Upscale</button>
+                <button class="btn-img-action-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, 'start')" title="Tạo lại">🔄 Lại</button>
             </div>`;
-        showToast(`✅ Ảnh ${refType} cho ${clipId}`);
+        showToast(`✅ Ảnh opening frame cho ${ clipId } `);
     } catch (err) {
         container.innerHTML = `
-            ${label}
-            <div class="clip-image-placeholder-sm">
-                <span style="color:var(--accent-red);font-size:0.75rem">❌ Lỗi</span>
-                <button class="btn-generate-img-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, '${refType}')">
+        < div style = "aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--accent-red)" >
+                <span style="color:var(--accent-red);font-size:0.75rem">❌ ${err.message}</span>
+                <button class="btn-generate-img" onclick="handleGenerateRefImage('${clipId}', ${index}, 'start')" style="font-size:0.8rem">
                     🔄 Thử lại
                 </button>
-            </div>`;
+            </div > `;
         showToast('❌ Lỗi: ' + err.message);
     }
 }
@@ -951,16 +925,16 @@ async function handleGenerateRefImage(clipId, index, refType) {
 // Generate all 3 ref images for a clip
 async function handleGenerateAllRefImages(clipId, index) {
     const types = ['start', 'key', 'end'];
-    showToast(`⏳ Đang tạo 3 ảnh ref cho ${clipId}...`);
+    showToast(`⏳ Đang tạo 3 ảnh ref cho ${ clipId }...`);
     for (const t of types) {
         await handleGenerateRefImage(clipId, index, t);
     }
-    showToast(`✅ Đã tạo 3 ảnh ref cho ${clipId}!`);
+    showToast(`✅ Đã tạo 3 ảnh ref cho ${ clipId } !`);
 }
 
 // ============ UPSCALE IMAGE ============
 async function handleUpscaleImage(clipId, index, currentSrc) {
-    const container = document.getElementById(`img-${clipId}`);
+    const container = document.getElementById(`img - ${ clipId } `);
     const actionsDiv = container.querySelector('.img-action-buttons');
     if (actionsDiv) {
         actionsDiv.innerHTML = '<span style="font-size:0.75rem;color:var(--accent-cyan)">⏳ Đang upscale...</span>';
@@ -990,16 +964,16 @@ async function handleUpscaleImage(clipId, index, currentSrc) {
         }
         if (actionsDiv) {
             actionsDiv.innerHTML = `
-                <button class="btn-img-action" title="Tải ảnh Upscaled" onclick="downloadImage('${data.imagePath}', '${clipId}_upscaled')">
+        < button class="btn-img-action" title = "Tải ảnh Upscaled" onclick = "downloadImage('${data.imagePath}', '${clipId}_upscaled')" >
                     📥 Tải HD
-                </button>
-                <span style="font-size:0.75rem;color:var(--accent-green)">✅ Upscaled!</span>`;
+                </button >
+        <span style="font-size:0.75rem;color:var(--accent-green)">✅ Upscaled!</span>`;
         }
-        showToast(`✅ Đã upscale ảnh ${clipId}!`);
+        showToast(`✅ Đã upscale ảnh ${ clipId } !`);
     } catch (err) {
         if (actionsDiv) {
             actionsDiv.innerHTML = `
-                <button class="btn-img-action" onclick="downloadImage('${currentSrc}', '${clipId}')">📥 Tải</button>
+        < button class="btn-img-action" onclick = "downloadImage('${currentSrc}', '${clipId}')" >📥 Tải</button >
                 <button class="btn-img-action" onclick="handleUpscaleImage('${clipId}', ${index}, '${currentSrc}')">🔍 Thử lại</button>
                 <span style="font-size:0.7rem;color:var(--accent-red)">❌ ${err.message}</span>`;
         }
@@ -1013,7 +987,7 @@ async function handleGenerateAllImages() {
     const engine = document.getElementById('engineSelect')?.value ||
         document.getElementById('engineSelectVideo')?.value || 'gemini';
 
-    showLoading('Đang tạo tất cả ảnh reference...', `${currentPlan.clips.length} ảnh · Engine: ${engine}`);
+    showLoading('Đang tạo tất cả ảnh reference...', `${ currentPlan.clips.length } ảnh · Engine: ${ engine } `);
 
     try {
         const res = await fetch('/api/generate-all', {
@@ -1031,24 +1005,24 @@ async function handleGenerateAllImages() {
 
         // Update images in cards
         data.results.forEach(result => {
-            const container = document.getElementById(`img-${result.clip_id}`);
+            const container = document.getElementById(`img - ${ result.clip_id } `);
             if (container && result.success) {
-                container.innerHTML = `<img src="${result.imagePath}" alt="${result.clip_id}" loading="lazy">`;
+                container.innerHTML = `< img src = "${result.imagePath}" alt = "${result.clip_id}" loading = "lazy" > `;
             } else if (container) {
                 container.innerHTML = `
-                    <div class="clip-image-placeholder">
-                        <span style="color:var(--accent-red)">❌ ${result.error}</span>
-                    </div>`;
+        < div class="clip-image-placeholder" >
+            <span style="color:var(--accent-red)">❌ ${result.error}</span>
+                    </div > `;
             }
         });
 
         const successCount = data.results.filter(r => r.success).length;
-        showToast(`✅ Đã tạo ${successCount}/${data.results.length} ảnh`);
-    } catch (err) {
-        showToast('❌ Lỗi: ' + err.message);
-    } finally {
-        hideLoading();
-    }
+        showToast(`✅ Đã tạo ${ successCount }/${data.results.length} ảnh`);
+} catch (err) {
+    showToast('❌ Lỗi: ' + err.message);
+} finally {
+    hideLoading();
+}
 }
 
 // ============ COPY / DOWNLOAD ============
@@ -2375,16 +2349,17 @@ async function viewChannelDetail(id, isAdmin) {
 
         let briefHtml = '';
         if (ch.brief) {
+            const formatVal = (v) => typeof v === 'object' ? JSON.stringify(v) : v;
             briefHtml = `<div class="dna-card" style="margin-top:12px;background:rgba(16,185,129,0.05)">
                 <h4 style="margin:0 0 8px">\ud83d\udccb Chi\u1ebfn L\u01b0\u1ee3c K\u00eanh</h4>
                 <div style="font-size:0.85rem;color:var(--text-secondary);display:grid;gap:6px">
-                    ${ch.brief.target_audience ? `<div>\ud83c\udfaf <strong>\u0110\u1ed1i t\u01b0\u1ee3ng:</strong> ${ch.brief.target_audience}</div>` : ''}
-                    ${ch.brief.tone ? `<div>\ud83c\udfa4 <strong>Tone:</strong> ${ch.brief.tone}</div>` : ''}
-                    ${ch.brief.products ? `<div>\ud83d\udcb0 <strong>S\u1ea3n ph\u1ea9m:</strong> ${ch.brief.products}</div>` : ''}
-                    ${ch.brief.competitors ? `<div>\ud83c\udfc6 <strong>\u0110\u1ed1i th\u1ee7:</strong> ${ch.brief.competitors}</div>` : ''}
-                    ${ch.brief.content_pillars?.length ? `<div>\ud83d\udccc <strong>N\u1ed9i dung ch\u00ednh:</strong> ${ch.brief.content_pillars.join(', ')}</div>` : ''}
-                    ${ch.brief.cta_strategy ? `<div>\ud83d\udce3 <strong>CTA:</strong> ${ch.brief.cta_strategy}</div>` : ''}
-                    ${ch.brief.dos_and_donts ? `<div>\u26a0\ufe0f <strong>L\u01b0u \u00fd:</strong> ${ch.brief.dos_and_donts}</div>` : ''}
+                    ${ch.brief.target_audience ? `<div>\ud83c\udfaf <strong>\u0110\u1ed1i t\u01b0\u1ee3ng:</strong> ${formatVal(ch.brief.target_audience)}</div>` : ''}
+                    ${ch.brief.tone ? `<div>\ud83c\udfa4 <strong>Tone:</strong> ${formatVal(ch.brief.tone)}</div>` : ''}
+                    ${ch.brief.products ? `<div>\ud83d\udcb0 <strong>S\u1ea3n ph\u1ea9m:</strong> ${formatVal(ch.brief.products)}</div>` : ''}
+                    ${ch.brief.competitors ? `<div>\ud83c\udfc6 <strong>\u0110\u1ed1i th\u1ee7:</strong> ${formatVal(ch.brief.competitors)}</div>` : ''}
+                    ${ch.brief.content_pillars?.length ? `<div>\ud83d\udccc <strong>N\u1ed9i dung ch\u00ednh:</strong> ${Array.isArray(ch.brief.content_pillars) ? ch.brief.content_pillars.join(', ') : formatVal(ch.brief.content_pillars)}</div>` : ''}
+                    ${ch.brief.cta_strategy ? `<div>\ud83d\udce3 <strong>CTA:</strong> ${formatVal(ch.brief.cta_strategy)}</div>` : ''}
+                    ${ch.brief.dos_and_donts ? `<div>\u26a0\ufe0f <strong>L\u01b0u \u00fd:</strong> ${typeof ch.brief.dos_and_donts === 'object' ? (ch.brief.dos_and_donts.do ? '✅ ' + ch.brief.dos_and_donts.do + (ch.brief.dos_and_donts.dont ? ' ❌ ' + ch.brief.dos_and_donts.dont : '') : JSON.stringify(ch.brief.dos_and_donts)) : ch.brief.dos_and_donts}</div>` : ''}
                 </div>
             </div>`;
         }
@@ -2396,6 +2371,53 @@ async function viewChannelDetail(id, isAdmin) {
             if (ch.socialLinks.tiktok) links.push(`<a href="${ch.socialLinks.tiktok}" target="_blank" style="color:#06b6d4">\ud83c\udfb5 TikTok</a>`);
             if (ch.socialLinks.facebook) links.push(`<a href="${ch.socialLinks.facebook}" target="_blank" style="color:#60a5fa">\ud83d\udcd8 Facebook</a>`);
             if (links.length) socialHtml = `<div style="margin-top:8px;display:flex;gap:16px">${links.join('')}</div>`;
+        }
+
+        // Aggregate metrics from all roadmaps
+        let metricsHtml = '';
+        let totalViews = 0, totalLikes = 0, totalComments = 0, publishedCount = 0;
+        rms.forEach(r => {
+            r.days?.forEach(d => {
+                d.videos?.forEach(v => {
+                    if (v.status === 'published') publishedCount++;
+                    if (v.metrics) {
+                        ['youtube', 'tiktok', 'facebook', 'instagram'].forEach(p => {
+                            if (v.metrics[p]) {
+                                totalViews += v.metrics[p].views || 0;
+                                totalLikes += v.metrics[p].likes || 0;
+                                totalComments += v.metrics[p].comments || 0;
+                            }
+                        });
+                        if (typeof v.metrics.views === 'number') totalViews += v.metrics.views;
+                        if (typeof v.metrics.likes === 'number') totalLikes += v.metrics.likes;
+                        if (typeof v.metrics.comments === 'number') totalComments += v.metrics.comments;
+                    }
+                });
+            });
+        });
+        if (publishedCount > 0) {
+            metricsHtml = `
+            <div style="margin-top:16px;padding:16px;background:linear-gradient(135deg, rgba(139,92,246,0.1), rgba(59,130,246,0.1));border-radius:12px;border:1px solid rgba(139,92,246,0.2)">
+                <h4 style="margin:0 0 12px">\ud83d\udcca T\u1ed5ng Quan Metrics</h4>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.3rem;font-weight:700;color:#8b5cf6">${publishedCount}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary)">\u0110\u00e3 \u0111\u0103ng</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.3rem;font-weight:700;color:#3b82f6">${totalViews.toLocaleString()}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary)">\ud83d\udc41 L\u01b0\u1ee3t xem</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.3rem;font-weight:700;color:#ef4444">${totalLikes.toLocaleString()}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary)">\u2764\ufe0f L\u01b0\u1ee3t th\u00edch</div>
+                    </div>
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.3rem;font-weight:700;color:#10b981">${totalComments.toLocaleString()}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary)">\ud83d\udcac B\u00ecnh lu\u1eadn</div>
+                    </div>
+                </div>
+            </div>`;
         }
 
         let roadmapsHtml = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 roadmap</p>';
@@ -2423,6 +2445,7 @@ async function viewChannelDetail(id, isAdmin) {
             ${ch.description ? `<p style="margin-top:10px;color:var(--text-secondary);font-size:0.9rem">${ch.description}</p>` : ''}
             ${socialHtml}
             ${briefHtml}
+            ${metricsHtml}
             <h4 style="margin:20px 0 10px">\ud83d\uddd3\ufe0f Roadmaps (${rms.length})</h4>
             ${roadmapsHtml}
         `;

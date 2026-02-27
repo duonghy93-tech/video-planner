@@ -102,9 +102,7 @@ function buildClipJsonSchema(clipCount) {
       "duration_sec": 8,
       "format": "9:16",
       "character_ids": ["char_01"],
-      "ref_image_start": "OPENING FRAME (0-2s): Detailed image prompt for the first moment of the clip. MUST include FULL character appearance+clothing. Describe composition, camera angle, lighting, background.",
-      "ref_image_key": "KEY MOMENT (3-5s): Detailed image prompt for the main action/peak moment. MUST include FULL character appearance+clothing. Describe the key action, expression, composition.",
-      "ref_image_end": "CLOSING FRAME (6-8s): Detailed image prompt for the last moment. MUST include FULL character appearance+clothing. Should transition smoothly to the next clip.",
+      "ref_image": "OPENING FRAME: Ultra-detailed 9:16 VERTICAL image prompt for THE FIRST FRAME of this clip. This is the starting point for Veo3 video generation. MUST include: FULL character appearance+clothing, exact composition, camera angle (e.g. medium shot, close-up), lighting setup, background details, mood/atmosphere. Make this CINEMATIC and visually striking.",
       "voice_id": "en-US-male-cinematic-deep",
       "constraints": {
         "style": "...",
@@ -130,13 +128,15 @@ function buildClipJsonSchema(clipCount) {
   ]
 }
 
-3 REFERENCE IMAGE RULES:
-- Each clip MUST have 3 image prompts: ref_image_start, ref_image_key, ref_image_end
-- ref_image_start = Opening frame (0-2s): establishes the scene, character position, composition
-- ref_image_key = Key moment (3-5s): the main action or peak moment of the clip
-- ref_image_end = Closing frame (6-8s): should visually connect/transition to the NEXT clip
-- ALL 3 prompts MUST include FULL character appearance+clothing (never use shorthand like "same character")
-- The 3 images should tell a visual story: Start → Action → End
+REFERENCE IMAGE RULES:
+- Each clip has exactly 1 image prompt: "ref_image"
+- This is the OPENING FRAME — the first visual moment of the clip
+- Veo3 will EXTEND this image into a full video clip, so it must be perfect
+- The image MUST be 9:16 VERTICAL format (portrait/tall)
+- MUST include FULL character appearance+clothing (never use shorthand like "same character")
+- Make it CINEMATIC: professional lighting, strong composition, vivid colors
+- Describe camera angle explicitly: close-up, medium shot, wide shot, bird's eye, etc.
+- Include mood/atmosphere: dramatic, warm, energetic, mysterious, etc.
 
 CHARACTER CONSISTENCY RULES:
 - Define ALL characters in "characters" array with EXTREMELY detailed appearance
