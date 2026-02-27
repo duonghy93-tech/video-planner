@@ -78,7 +78,7 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Configure API key at runtime
+// Configure API key at runtime (per-session, not saved to disk)
 app.post('/api/config', (req, res) => {
     try {
         const { apiKey } = req.body;
@@ -92,12 +92,8 @@ app.post('/api/config', (req, res) => {
         delete require.cache[require.resolve('./gemini-service')];
         gemini = require('./gemini-service');
 
-        // Save to .env for persistence
-        const envPath = path.join(__dirname, '.env');
-        fs.writeFileSync(envPath, `GEMINI_API_KEY=${apiKey.trim()}\n`);
-
-        console.log('✅ API Key configured via UI');
-        res.json({ success: true, message: 'API Key đã được cấu hình thành công!' });
+        console.log('✅ API Key configured via UI (session only)');
+        res.json({ success: true, message: 'API Key đã được cấu hình thành công! (chỉ cho phiên này)' });
     } catch (err) {
         console.error('[config] Error:', err.message);
         res.status(500).json({ error: 'Lỗi khi cấu hình: ' + err.message });

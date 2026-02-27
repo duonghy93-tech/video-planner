@@ -481,18 +481,39 @@ function renderClipCard(clip, index) {
             </div>`;
     }
 
-    return `
-        <div class="clip-card" id="card-${clipId}">
-            <div class="clip-card-header">
-                <div class="clip-number">
-                    <div class="clip-badge">${clipNum}</div>
-                    <div>
-                        <div style="font-weight:600;font-size:0.9rem">${clipId}</div>
-                        <div class="clip-meta">${clip.duration_sec || 8}s · ${clip.format || '9:16'}</div>
-                    </div>
-                </div>
-            </div>
+    // 3 Reference Images
+    const refTypes = [
+        { key: 'ref_image_start', label: '🎬 Start (0-2s)', type: 'start' },
+        { key: 'ref_image_key', label: '⚡ Key (3-5s)', type: 'key' },
+        { key: 'ref_image_end', label: '🏁 End (6-8s)', type: 'end' }
+    ];
 
+    // Backward compat: if old format with single reference_image_prompt, show that
+    const hasNewFormat = clip.ref_image_start || clip.ref_image_key || clip.ref_image_end;
+
+    let imagesHtml = '';
+    if (hasNewFormat) {
+        imagesHtml = `
+            <div class="clip-images-row">
+                ${refTypes.map(ref => `
+                    <div class="clip-ref-image" id="img-${clipId}-${ref.type}">
+                        <div class="ref-image-label">${ref.label}</div>
+                        <div class="clip-image-placeholder-sm">
+                            <button class="btn-generate-img-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, '${ref.type}')">
+                                ✨ Tạo
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="text-align:center;margin:8px 0">
+                <button class="btn-generate-img" onclick="handleGenerateAllRefImages('${clipId}', ${index})">
+                    ✨ Tạo cả 3 ảnh reference
+                </button>
+            </div>`;
+    } else {
+        // Old format fallback
+        imagesHtml = `
             <div class="clip-image-container" id="img-${clipId}">
                 <div class="clip-image-placeholder">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -505,18 +526,47 @@ function renderClipCard(clip, index) {
                         ✨ Tạo ảnh reference
                     </button>
                 </div>
+            </div>`;
+    }
+
+    // Image prompts display
+    let promptsHtml = '';
+    if (hasNewFormat) {
+        promptsHtml = refTypes.map(ref => {
+            const prompt = clip[ref.key];
+            return prompt ? `
+                <div class="clip-section">
+                    <div class="clip-section-title">🖼️ ${ref.label}</div>
+                    <div class="clip-section-value">${prompt}</div>
+                </div>` : '';
+        }).join('');
+    } else if (clip.reference_image_prompt) {
+        promptsHtml = `
+            <div class="clip-section">
+                <div class="clip-section-title">🖼️ Image Prompt</div>
+                <div class="clip-section-value">${clip.reference_image_prompt}</div>
+            </div>`;
+    }
+
+    return `
+        <div class="clip-card" id="card-${clipId}">
+            <div class="clip-card-header">
+                <div class="clip-number">
+                    <div class="clip-badge">${clipNum}</div>
+                    <div>
+                        <div style="font-weight:600;font-size:0.9rem">${clipId}</div>
+                        <div class="clip-meta">${clip.duration_sec || 8}s · ${clip.format || '9:16'}</div>
+                    </div>
+                </div>
             </div>
+
+            ${imagesHtml}
 
             <div class="clip-body">
                 ${timelineHtml}
                 ${audioHtml}
                 ${constraintsHtml}
-
-                ${clip.reference_image_prompt ? `
-                <div class="clip-section">
-                    <div class="clip-section-title">🖼️ Image Prompt</div>
-                    <div class="clip-section-value">${clip.reference_image_prompt}</div>
-                </div>` : ''}
+                ${promptsHtml}
             </div>
 
             <div class="clip-actions">
@@ -700,13 +750,14 @@ async function handleGenerateCharacterImage(charId, charIndex, prompt) {
 }
 
 // ============ IMAGE GENERATION ============
+// Generate a single ref image (for old format or fallback)
 async function handleGenerateSingleImage(clipId, index) {
     if (!currentPlan || !currentPlan.clips[index]) return;
 
     const clip = currentPlan.clips[index];
     const container = document.getElementById(`img-${clipId}`);
     const engine = document.getElementById('engineSelect')?.value ||
-        document.getElementById('engineSelectVideo')?.value || 'gemini';
+        document.getElementById('engineSelectVideo')?.value || 'imagen';
     const aspectRatio = document.getElementById('aspectRatio')?.value ||
         document.getElementById('aspectRatioVideo')?.value || '9:16';
 
@@ -717,11 +768,12 @@ async function handleGenerateSingleImage(clipId, index) {
         </div>`;
 
     try {
+        const prompt = clip.reference_image_prompt || clip.ref_image_start || '';
         const res = await fetch('/api/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                prompt: clip.reference_image_prompt,
+                prompt: prompt,
                 clipId: clipId,
                 engine: engine,
                 aspectRatio: aspectRatio,
@@ -757,6 +809,81 @@ async function handleGenerateSingleImage(clipId, index) {
             </div>`;
         showToast('❌ Lỗi tạo ảnh: ' + err.message);
     }
+}
+
+// Generate a specific ref image (start/key/end)
+async function handleGenerateRefImage(clipId, index, refType) {
+    if (!currentPlan || !currentPlan.clips[index]) return;
+
+    const clip = currentPlan.clips[index];
+    const refKey = `ref_image_${refType}`;
+    const prompt = clip[refKey];
+    if (!prompt) {
+        showToast('⚠️ Không có prompt cho ảnh ' + refType);
+        return;
+    }
+
+    const container = document.getElementById(`img-${clipId}-${refType}`);
+    const labelEl = container.querySelector('.ref-image-label');
+    const label = labelEl ? labelEl.outerHTML : '';
+    const engine = document.getElementById('engineSelect')?.value ||
+        document.getElementById('engineSelectVideo')?.value || 'imagen';
+    const aspectRatio = document.getElementById('aspectRatio')?.value ||
+        document.getElementById('aspectRatioVideo')?.value || '9:16';
+
+    container.innerHTML = `
+        ${label}
+        <div class="clip-image-loading-sm">
+            <div class="mini-spinner"></div>
+            <span style="font-size:0.75rem;color:var(--text-muted)">Tạo ảnh...</span>
+        </div>`;
+
+    try {
+        const res = await fetch('/api/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: prompt,
+                clipId: `${clipId}_${refType}`,
+                engine: engine,
+                aspectRatio: aspectRatio,
+                projectDir: currentPlan._outputDir
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        const imgSrc = data.imagePath;
+        container.innerHTML = `
+            ${label}
+            <img src="${imgSrc}" alt="${clipId} ${refType}" loading="lazy" class="ref-img">
+            <div class="ref-img-actions">
+                <button class="btn-img-action-sm" onclick="downloadImage('${imgSrc}', '${clipId}_${refType}')" title="Tải">📥</button>
+                <button class="btn-img-action-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, '${refType}')" title="Tạo lại">🔄</button>
+            </div>`;
+        showToast(`✅ Ảnh ${refType} cho ${clipId}`);
+    } catch (err) {
+        container.innerHTML = `
+            ${label}
+            <div class="clip-image-placeholder-sm">
+                <span style="color:var(--accent-red);font-size:0.75rem">❌ Lỗi</span>
+                <button class="btn-generate-img-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, '${refType}')">
+                    🔄 Thử lại
+                </button>
+            </div>`;
+        showToast('❌ Lỗi: ' + err.message);
+    }
+}
+
+// Generate all 3 ref images for a clip
+async function handleGenerateAllRefImages(clipId, index) {
+    const types = ['start', 'key', 'end'];
+    showToast(`⏳ Đang tạo 3 ảnh ref cho ${clipId}...`);
+    for (const t of types) {
+        await handleGenerateRefImage(clipId, index, t);
+    }
+    showToast(`✅ Đã tạo 3 ảnh ref cho ${clipId}!`);
 }
 
 // ============ UPSCALE IMAGE ============
