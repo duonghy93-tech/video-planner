@@ -202,6 +202,137 @@ app.delete('/api/channels/:id', auth.authMiddleware, (req, res) => {
     }
 });
 
+// ============ ROADMAP ROUTES ============
+
+// Generate new roadmap for a channel
+app.post('/api/roadmaps/generate', auth.authMiddleware, async (req, res) => {
+    try {
+        const { channelId, startDate } = req.body;
+        if (!channelId) return res.status(400).json({ error: 'Thi\u1ebfu channelId' });
+
+        // Find channel (must belong to user)
+        const channels = readJsonFile(CHANNELS_FILE);
+        const channel = channels.find(c => c.id === channelId && c.userId === req.user.id);
+        if (!channel) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
+
+        // Load preset if linked
+        let preset = null;
+        if (channel.presetId) {
+            const presets = readJsonFile(PRESETS_FILE);
+            const found = presets.find(p => p.id === channel.presetId);
+            if (found) preset = found.data;
+        }
+
+        console.log(`\ud83d\uddd3\ufe0f Generating roadmap for "${channel.name}"...`);
+        const roadmapData = await gemini.generateRoadmap(channel, preset, startDate);
+
+        const roadmap = {
+            id: 'rm_' + Date.now().toString(36),
+            channelId,
+            userId: req.user.id,
+            ...roadmapData,
+            createdAt: new Date().toISOString()
+        };
+
+        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        roadmaps.push(roadmap);
+        writeJsonFile(ROADMAPS_FILE, roadmaps);
+
+        console.log(`\u2705 Roadmap created: ${roadmap.roadmap_name || 'untitled'} (${roadmapData.total_videos} videos)`);
+        res.json({ success: true, roadmap });
+    } catch (err) {
+        console.error('[roadmap] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get roadmaps for a channel
+app.get('/api/roadmaps/:channelId', auth.authMiddleware, (req, res) => {
+    const roadmaps = readJsonFile(ROADMAPS_FILE);
+    const channelRoadmaps = roadmaps
+        .filter(r => r.channelId === req.params.channelId && r.userId === req.user.id)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(channelRoadmaps);
+});
+
+// Update video status in a roadmap
+app.put('/api/roadmaps/:id/video-status', auth.authMiddleware, (req, res) => {
+    try {
+        const { day, slot, status, publishedUrl } = req.body;
+        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        const rm = roadmaps.find(r => r.id === req.params.id && r.userId === req.user.id);
+        if (!rm) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y roadmap' });
+
+        const dayObj = rm.days?.find(d => d.day === day);
+        if (!dayObj) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y ng\u00e0y' });
+
+        const video = dayObj.videos?.find(v => v.slot === slot);
+        if (!video) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y video' });
+
+        if (status) video.status = status;
+        if (publishedUrl) video.publishedUrl = publishedUrl;
+
+        writeJsonFile(ROADMAPS_FILE, roadmaps);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Generate next roadmap based on previous performance
+app.post('/api/roadmaps/:id/next', auth.authMiddleware, async (req, res) => {
+    try {
+        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        const prevRoadmap = roadmaps.find(r => r.id === req.params.id && r.userId === req.user.id);
+        if (!prevRoadmap) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y roadmap' });
+
+        const channels = readJsonFile(CHANNELS_FILE);
+        const channel = channels.find(c => c.id === prevRoadmap.channelId && c.userId === req.user.id);
+        if (!channel) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
+
+        let preset = null;
+        if (channel.presetId) {
+            const presets = readJsonFile(PRESETS_FILE);
+            const found = presets.find(p => p.id === channel.presetId);
+            if (found) preset = found.data;
+        }
+
+        // Collect performance data from prev roadmap videos
+        const performance = [];
+        prevRoadmap.days?.forEach(d => {
+            d.videos?.forEach(v => {
+                performance.push({
+                    title: v.title,
+                    status: v.status || 'not_published',
+                    views: v.metrics?.views,
+                    likes: v.metrics?.likes
+                });
+            });
+        });
+
+        console.log(`\ud83d\udd04 Generating next roadmap based on "${prevRoadmap.roadmap_name}"...`);
+        const roadmapData = await gemini.generateNextRoadmap(channel, preset, prevRoadmap, performance);
+
+        const newRoadmap = {
+            id: 'rm_' + Date.now().toString(36),
+            channelId: channel.id,
+            userId: req.user.id,
+            prevRoadmapId: prevRoadmap.id,
+            ...roadmapData,
+            createdAt: new Date().toISOString()
+        };
+
+        roadmaps.push(newRoadmap);
+        writeJsonFile(ROADMAPS_FILE, roadmaps);
+
+        console.log(`\u2705 Next roadmap: ${newRoadmap.roadmap_name || 'untitled'}`);
+        res.json({ success: true, roadmap: newRoadmap });
+    } catch (err) {
+        console.error('[roadmap-next] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Configure API key at runtime (per-session, not saved to disk)
 app.post('/api/config', (req, res) => {
     try {

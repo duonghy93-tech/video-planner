@@ -636,6 +636,143 @@ function parseJsonResponse(text) {
         throw new Error('Failed to parse AI response as JSON. Raw response: ' + text.substring(0, 500));
     }
 }
+// ============ ROADMAP GENERATION ============
+async function generateRoadmap(channel, preset, startDate) {
+    const days = 7;
+    const perDay = channel.postsPerDay || 2;
+    const totalVideos = days * perDay;
+
+    let presetRules = '';
+    if (preset) {
+        if (preset.type === 'custom' && preset.custom_rules) {
+            presetRules = `\n\nPRESET RULES (MUST FOLLOW):\n${preset.custom_rules}`;
+        }
+        if (preset.style_dna) {
+            presetRules += `\nSTYLE: ${preset.style_dna.overall_style || ''}`;
+            presetRules += `\nMOOD: ${preset.style_dna.mood || ''}`;
+        }
+        if (preset.hook_strategy) {
+            presetRules += `\nHOOK: ${preset.hook_strategy.hook_type || ''} — ${preset.hook_strategy.hook_description || ''}`;
+        }
+    }
+
+    const prompt = `You are an expert social media content strategist.
+
+Create a ${days}-day content roadmap for this channel:
+- Channel: ${channel.name}
+- Niche: ${channel.niche || 'General'}
+- Description: ${channel.description || 'N/A'}
+- Target language: ${channel.language === 'VN' ? 'Vietnamese' : 'English (US)'}
+- Posts per day: ${perDay}
+- Total videos needed: ${totalVideos}
+- Start date: ${startDate || new Date().toISOString().split('T')[0]}
+- Platforms: ${Object.entries(channel.socialLinks || {}).filter(([k, v]) => v).map(([k]) => k).join(', ') || 'TikTok, YouTube'}
+${presetRules}
+
+REQUIREMENTS:
+1. Each video idea must be UNIQUE and specific (not generic)
+2. Mix content types: educational, entertaining, trending, emotional
+3. Include viral hooks that grab attention in 0-2 seconds
+4. Each day should have variety (don't repeat same format)
+5. Include trending topics and seasonal relevance
+6. Optimize for short-form video (8-30 seconds)
+7. Think about what makes people STOP SCROLLING
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{
+  "roadmap_name": "Week plan title",
+  "channel": "${channel.name}",
+  "week_start": "${startDate || new Date().toISOString().split('T')[0]}",
+  "total_videos": ${totalVideos},
+  "days": [
+    {
+      "day": 1,
+      "date": "YYYY-MM-DD",
+      "day_name": "Monday/Tuesday/etc",
+      "theme": "Day theme (e.g., 'Hack Day', 'Before/After')",
+      "videos": [
+        {
+          "slot": 1,
+          "title": "Catchy video title (max 60 chars)",
+          "description": "What happens in this video (2-3 sentences)",
+          "hook": "Opening hook text (what viewer sees/hears in first 2 sec)",
+          "content_type": "hack/tip/before-after/reaction/tutorial/story",
+          "viral_angle": "Why this would go viral",
+          "keywords": ["keyword1", "keyword2", "keyword3"],
+          "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
+          "best_post_time": "HH:MM",
+          "estimated_duration": "8s/15s/30s"
+        }
+      ]
+    }
+  ],
+  "weekly_strategy": "Overall strategy explanation for this week"
+}`;
+
+    const result = await flashModel.generateContent(prompt);
+    const text = result.response.text();
+    return safeJsonParse(text);
+}
+
+async function generateNextRoadmap(channel, preset, prevRoadmap, performance) {
+    let perfSummary = '';
+    if (performance && performance.length > 0) {
+        perfSummary = '\n\nPREVIOUS WEEK PERFORMANCE:\n';
+        performance.forEach(v => {
+            perfSummary += `- "${v.title}": ${v.views || '?'} views, ${v.likes || '?'} likes, ${v.status || 'unknown'}\n`;
+        });
+    }
+
+    let prevTopics = '';
+    if (prevRoadmap && prevRoadmap.days) {
+        prevTopics = '\n\nPREVIOUS WEEK TOPICS (do NOT repeat):\n';
+        prevRoadmap.days.forEach(d => {
+            d.videos?.forEach(v => {
+                prevTopics += `- ${v.title}\n`;
+            });
+        });
+    }
+
+    const days = 7;
+    const perDay = channel.postsPerDay || 2;
+    const totalVideos = days * perDay;
+
+    // Calculate new start date (7 days after previous)
+    const prevStart = prevRoadmap?.week_start || new Date().toISOString().split('T')[0];
+    const nextStart = new Date(new Date(prevStart).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    let presetRules = '';
+    if (preset && preset.type === 'custom' && preset.custom_rules) {
+        presetRules = `\n\nPRESET RULES (MUST FOLLOW):\n${preset.custom_rules}`;
+    }
+
+    const prompt = `You are an expert social media content strategist. Create the NEXT 7-day roadmap based on previous performance.
+
+Channel: ${channel.name} | Niche: ${channel.niche || 'General'} | Language: ${channel.language === 'VN' ? 'Vietnamese' : 'English (US)'}
+Posts per day: ${perDay} | Start date: ${nextStart}
+${presetRules}${perfSummary}${prevTopics}
+
+STRATEGY:
+- Topics that performed well → create SIMILAR but FRESH variations
+- Topics that performed poorly → REPLACE with different approach
+- Add 2-3 completely NEW trending ideas
+- Keep the same brand voice and style
+
+Return ONLY valid JSON with the same structure as before:
+{
+  "roadmap_name": "...",
+  "channel": "${channel.name}",
+  "week_start": "${nextStart}",
+  "total_videos": ${totalVideos},
+  "performance_insights": "What worked, what didn't, strategy adjustments",
+  "days": [{ "day": 1, "date": "...", "day_name": "...", "theme": "...", "videos": [{ "slot": 1, "title": "...", "description": "...", "hook": "...", "content_type": "...", "viral_angle": "...", "keywords": [], "hashtags": [], "best_post_time": "HH:MM", "estimated_duration": "8s" }] }],
+  "weekly_strategy": "..."
+}`;
+
+    const result = await flashModel.generateContent(prompt);
+    const text = result.response.text();
+    return safeJsonParse(text);
+}
 
 module.exports = {
     analyzeVideo,
@@ -644,5 +781,7 @@ module.exports = {
     generateImage,
     generateImageImagen,
     upscaleImage,
-    reviewVideo
+    reviewVideo,
+    generateRoadmap,
+    generateNextRoadmap
 };

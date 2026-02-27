@@ -1748,6 +1748,185 @@ function loadChannelPresetDropdown() {
 }
 
 // Placeholder for Phase 3
-function generateRoadmap(channelId) {
-    showToast('🚧 Tính năng Roadmap sẽ sớm ra mắt!');
+let currentRoadmap = null;
+let currentRoadmapChannelId = null;
+
+async function generateRoadmap(channelId) {
+    if (!getStoredApiKey()) {
+        showToast('\u26a0\ufe0f Nh\u1eadp API Key tr\u01b0\u1edbc');
+        return;
+    }
+
+    const channel = myChannels.find(c => c.id === channelId);
+    if (!channel) { showToast('\u274c Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh'); return; }
+
+    // Check if roadmaps exist
+    try {
+        const res = await fetch('/api/roadmaps/' + channelId, {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        const roadmaps = await res.json();
+        if (roadmaps.length > 0) {
+            currentRoadmap = roadmaps[0]; // Latest
+            currentRoadmapChannelId = channelId;
+            renderRoadmap();
+            return;
+        }
+    } catch (e) { }
+
+    // No roadmaps — generate new
+    await generateNewRoadmap(channelId);
+}
+
+async function generateNewRoadmap(channelId, startDate) {
+    showLoading('\ud83d\uddd3\ufe0f AI \u0111ang t\u1ea1o Roadmap 7 ng\u00e0y...', 'Ph\u00e2n t\u00edch niche, trend, v\u00e0 t\u1ea1o \u00fd t\u01b0\u1edfng video');
+
+    try {
+        const res = await fetch('/api/roadmaps/generate', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ channelId, startDate })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        currentRoadmap = data.roadmap;
+        currentRoadmapChannelId = channelId;
+        hideLoading();
+        showToast('\u2705 Roadmap \u0111\u00e3 t\u1ea1o xong!');
+        renderRoadmap();
+    } catch (err) {
+        hideLoading();
+        showToast('\u274c ' + err.message);
+    }
+}
+
+function renderRoadmap() {
+    if (!currentRoadmap) return;
+
+    const container = document.getElementById('channelList');
+    if (!container) return;
+
+    const rm = currentRoadmap;
+    const channel = myChannels.find(c => c.id === currentRoadmapChannelId);
+
+    let html = `
+    <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+            <button class="btn-ghost" onclick="loadMyChannels()" style="margin-right:8px">\u2b05 Quay l\u1ea1i</button>
+            <strong>\ud83d\uddd3\ufe0f ${rm.roadmap_name || 'Roadmap'}</strong>
+            <span style="color:var(--text-secondary);font-size:0.85rem;margin-left:8px">${rm.channel || ''} \u2022 ${rm.week_start || ''}</span>
+        </div>
+        <div style="display:flex;gap:8px">
+            <button class="btn-primary btn-sm" onclick="generateNewRoadmap('${currentRoadmapChannelId}')">\ud83d\udd04 T\u1ea1o l\u1ea1i</button>
+            <button class="btn-dna-save btn-sm" onclick="generateNextWeek()">\u27a1\ufe0f Tu\u1ea7n ti\u1ebfp theo</button>
+        </div>
+    </div>`;
+
+    if (rm.weekly_strategy) {
+        html += `<div class="dna-card" style="margin-bottom:16px;border-left:3px solid var(--accent-purple)">
+            <strong>\ud83c\udfaf Chi\u1ebfn l\u01b0\u1ee3c tu\u1ea7n:</strong>
+            <p style="color:var(--text-secondary);font-size:0.85rem;margin-top:4px">${rm.weekly_strategy}</p>
+        </div>`;
+    }
+
+    if (rm.days && rm.days.length > 0) {
+        rm.days.forEach(day => {
+            const dayNames = { 'Monday': 'Th\u1ee9 2', 'Tuesday': 'Th\u1ee9 3', 'Wednesday': 'Th\u1ee9 4', 'Thursday': 'Th\u1ee9 5', 'Friday': 'Th\u1ee9 6', 'Saturday': 'Th\u1ee9 7', 'Sunday': 'CN' };
+            const vnDay = dayNames[day.day_name] || day.day_name;
+
+            html += `<div class="dna-card" style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <h3 style="margin:0">\ud83d\udcc5 ${vnDay} — ${day.date || 'Ng\u00e0y ' + day.day}</h3>
+                    ${day.theme ? `<span style="background:rgba(139,92,246,0.15);color:var(--accent-purple);padding:2px 8px;border-radius:6px;font-size:0.75rem">${day.theme}</span>` : ''}
+                </div>`;
+
+            if (day.videos && day.videos.length > 0) {
+                day.videos.forEach(video => {
+                    const status = video.status || 'pending';
+                    const statusBadge = status === 'published'
+                        ? '<span style="color:#10b981">\u2705 \u0110\u00e3 \u0111\u0103ng</span>'
+                        : status === 'done'
+                            ? '<span style="color:#f59e0b">\u2705 \u0110\u00e3 quay</span>'
+                            : '<span style="color:#94a3b8">\u23f3 Ch\u01b0a l\u00e0m</span>';
+
+                    html += `
+                    <div style="background:rgba(15,12,41,0.4);border:1px solid var(--border-light);border-radius:10px;padding:12px;margin-bottom:8px">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                            <div style="flex:1">
+                                <div style="font-weight:600;font-size:0.95rem">\ud83c\udfac ${video.title}</div>
+                                <div style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px">${video.description || ''}</div>
+                                ${video.hook ? `<div style="margin-top:6px;font-size:0.8rem"><span style="color:#f59e0b">\ud83c\udfa3 Hook:</span> <em>"${video.hook}"</em></div>` : ''}
+                                <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;font-size:0.75rem">
+                                    ${video.content_type ? `<span style="background:rgba(236,72,153,0.15);color:#ec4899;padding:1px 6px;border-radius:4px">${video.content_type}</span>` : ''}
+                                    ${video.estimated_duration ? `<span style="color:var(--text-secondary)">\u23f1 ${video.estimated_duration}</span>` : ''}
+                                    ${video.best_post_time ? `<span style="color:var(--text-secondary)">\ud83d\udd52 ${video.best_post_time}</span>` : ''}
+                                </div>
+                                ${video.hashtags?.length ? `<div style="margin-top:4px;font-size:0.75rem;color:var(--accent-purple)">${video.hashtags.join(' ')}</div>` : ''}
+                            </div>
+                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;min-width:100px">
+                                ${statusBadge}
+                                <select onchange="updateVideoStatus('${rm.id}', ${day.day}, ${video.slot}, this.value)" style="font-size:0.7rem;padding:2px 6px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:4px;color:var(--text-primary)">
+                                    <option value="pending" ${status === 'pending' ? 'selected' : ''}>Ch\u01b0a l\u00e0m</option>
+                                    <option value="done" ${status === 'done' ? 'selected' : ''}>\u0110\u00e3 quay</option>
+                                    <option value="published" ${status === 'published' ? 'selected' : ''}>\u0110\u00e3 \u0111\u0103ng</option>
+                                </select>
+                                <button class="btn-ghost btn-sm" onclick="createPlanFromRoadmap('${video.title}', '${video.description?.replace(/'/g, "\\'") || ''}')" style="font-size:0.7rem" title="T\u1ea1o Video Plan">\ud83c\udfac Plan</button>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            }
+
+            html += `</div>`;
+        });
+    }
+
+    container.innerHTML = html;
+}
+
+async function updateVideoStatus(roadmapId, day, slot, status) {
+    try {
+        await fetch('/api/roadmaps/' + roadmapId + '/video-status', {
+            method: 'PUT',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ day, slot, status })
+        });
+    } catch (e) {
+        showToast('\u274c ' + e.message);
+    }
+}
+
+async function generateNextWeek() {
+    if (!currentRoadmap) return;
+    showLoading('\ud83d\udd04 AI \u0111ang t\u1ea1o Roadmap tu\u1ea7n ti\u1ebfp theo...', 'D\u1ef1a tr\u00ean hi\u1ec7u su\u1ea5t tu\u1ea7n tr\u01b0\u1edbc');
+
+    try {
+        const res = await fetch('/api/roadmaps/' + currentRoadmap.id + '/next', {
+            method: 'POST',
+            headers: getApiHeaders()
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        currentRoadmap = data.roadmap;
+        hideLoading();
+        showToast('\u2705 Roadmap tu\u1ea7n m\u1edbi \u0111\u00e3 t\u1ea1o!');
+        renderRoadmap();
+    } catch (err) {
+        hideLoading();
+        showToast('\u274c ' + err.message);
+    }
+}
+
+function createPlanFromRoadmap(title, description) {
+    // Switch to text tab and fill the description
+    const tabBtn = document.querySelector('[data-tab="text"]');
+    if (tabBtn) tabBtn.click();
+
+    setTimeout(() => {
+        const descInput = document.getElementById('videoDescription');
+        if (descInput) descInput.value = title + '\n\n' + description;
+        showToast('\ud83c\udfac M\u00f4 t\u1ea3 video \u0111\u00e3 \u0111i\u1ec1n s\u1eb5n, nh\u1ea5n "T\u1ea1o Plan" \u0111\u1ec3 ti\u1ebfp t\u1ee5c!');
+    }, 300);
 }
