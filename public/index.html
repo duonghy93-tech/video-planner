@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Planner — Veo 3.1</title>
+    <meta name="description"
+        content="AI Video Production Planner for Google Veo 3.1 — Phân tích video, tạo prompt và ảnh reference tự động">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <!-- Background effects -->
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="23 7 16 12 23 17 23 7" />
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="logo-text">Video Planner</h1>
+                    <span class="logo-badge">Veo 3.1</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="header-status" id="apiStatus" onclick="toggleApiKeyModal()" style="cursor:pointer"
+                    title="Click để cấu hình API Key">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Đang kiểm tra...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="text" id="tabText">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+                Tạo Từ Mô Tả
+            </button>
+            <button class="tab-btn" data-tab="video" id="tabVideo">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Phân Tích Video
+            </button>
+            <button class="tab-btn" data-tab="review" id="tabReview">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon
+                        points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                Đánh Giá Video
+            </button>
+        </nav>
+
+        <!-- Tab: Create from Text -->
+        <section class="tab-content active" id="panelText">
+            <div class="input-section">
+                <div class="section-header">
+                    <h2>✍️ Mô Tả Video Bạn Muốn Tạo</h2>
+                    <p>AI sẽ phân tích và tạo kế hoạch chi tiết cho từng clip 8 giây</p>
+                </div>
+
+                <!-- Preset Selector -->
+                <div class="preset-selector-row" id="presetSelectorRow">
+                    <div class="form-group flex-1">
+                        <label for="presetSelect">📂 Chọn Preset (tùy chọn)</label>
+                        <div class="preset-select-group">
+                            <select id="presetSelect">
+                                <option value="">-- Không dùng preset --</option>
+                            </select>
+                            <button class="btn-secondary btn-sm" onclick="openPresetManager()" title="Quản lý Preset">⚙️</button>
+                            <button class="btn-secondary btn-sm" onclick="openCharacterLibrary()" title="Thư viện Nhân vật">🎭</button>
+                        </div>
+                    </div>
+                    <div class="preset-badge" id="presetBadge" style="display:none;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="textDescription">Mô tả nội dung video</label>
+                    <textarea id="textDescription" rows="5"
+                        placeholder="VD: Tạo video quay cận cảnh chiếc bánh phô mai tan chảy trên chảo gang nóng, phong cách cinematic food photography, ánh sáng ấm studio, tông màu vàng nâu sang trọng..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="durationInput">Thời lượng video (giây)</label>
+                        <div class="duration-input-group">
+                            <input type="number" id="durationInput" min="8" step="8" value="24"
+                                placeholder="Nhập số giây...">
+                            <div class="duration-info">
+                                <span class="clip-count" id="clipCount">= 3 clips × 8s</span>
+                            </div>
+                        </div>
+                        <input type="range" id="durationSlider" min="8" max="600" step="8" value="24"
+                            style="margin-top:8px">
+                    </div>
+                    <div class="form-group">
+                        <label for="aspectRatio">Tỉ lệ khung hình</label>
+                        <select id="aspectRatio">
+                            <option value="9:16">📱 9:16 (Dọc — TikTok, Reels)</option>
+                            <option value="16:9">🖥️ 16:9 (Ngang — YouTube)</option>
+                            <option value="1:1">⬜ 1:1 (Vuông — Instagram)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="engineSelect">Engine tạo ảnh</label>
+                        <select id="engineSelect">
+                            <option value="gemini">Gemini Flash (Nhanh)</option>
+                            <option value="imagen">Imagen 4 (Chất lượng cao)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="langFormat">Ngôn ngữ & Format</label>
+                        <select id="langFormat">
+                            <option value="VN">🇻🇳 Việt Nam — Nội dung tiếng Việt</option>
+                            <option value="US">🇺🇸 US / English — All content in English</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn-primary" id="btnGenerateText" onclick="handleTextGenerate()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Tạo Kế Hoạch Video
+                </button>
+            </div>
+
+            <!-- Text Tab Results -->
+            <div class="results-section" id="textResults" style="display:none;"></div>
+        </section>
+
+        <!-- Tab: Analyze Video -->
+        <section class="tab-content" id="panelVideo">
+            <div class="input-section">
+                <div class="section-header">
+                    <h2>📹 Phân Tích Video</h2>
+                    <p>Upload file hoặc dán link video — AI sẽ phân tích và tạo prompt + ảnh để tái tạo bằng Veo 3.1</p>
+                </div>
+
+                <!-- URL Input -->
+                <div class="form-group">
+                    <label for="videoUrlInput">🔗 Dán link video (YouTube, TikTok, Facebook...)</label>
+                    <div class="url-input-group">
+                        <input type="url" id="videoUrlInput"
+                            placeholder="https://www.youtube.com/watch?v=... hoặc link video trực tiếp">
+                        <button class="btn-primary btn-sm" id="btnAnalyzeUrl" onclick="handleUrlAnalyze()">
+                            Phân Tích URL
+                        </button>
+                    </div>
+                    <p class="upload-hint" style="margin-top:6px">✅ Hỗ trợ YouTube, TikTok, Facebook, Instagram, Twitter
+                        và link trực tiếp (.mp4)</p>
+                </div>
+
+                <div class="divider-or">
+                    <span>HOẶC</span>
+                </div>
+
+                <!-- File Upload -->
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-zone-inner">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        <p class="upload-text">Kéo thả video vào đây hoặc <span>chọn file</span></p>
+                        <p class="upload-hint">MP4, WebM, MOV — Hỗ trợ video dài đến 30 phút</p>
+                        <input type="file" id="videoFileInput" accept="video/mp4,video/webm,video/quicktime" hidden>
+                    </div>
+                </div>
+
+                <div class="video-preview" id="videoPreview" style="display:none;">
+                    <video id="previewPlayer" controls></video>
+                    <div class="preview-info">
+                        <span id="previewName"></span>
+                        <button class="btn-ghost" onclick="clearVideoUpload()">✕ Xóa</button>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="aspectRatioVideo">Tỉ lệ khung hình</label>
+                        <select id="aspectRatioVideo">
+                            <option value="9:16">📱 9:16 (Dọc — TikTok, Reels)</option>
+                            <option value="16:9">🖥️ 16:9 (Ngang — YouTube)</option>
+                            <option value="1:1">⬜ 1:1 (Vuông — Instagram)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="engineSelectVideo">Engine tạo ảnh</label>
+                        <select id="engineSelectVideo">
+                            <option value="gemini">Gemini Flash (Nhanh)</option>
+                            <option value="imagen">Imagen 4 (Chất lượng cao)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="langFormatVideo">Ngôn ngữ & Format</label>
+                        <select id="langFormatVideo">
+                            <option value="VN">🇻🇳 Việt Nam — Nội dung tiếng Việt</option>
+                            <option value="US">🇺🇸 US / English — All content in English</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn-primary" id="btnAnalyzeVideo" onclick="handleVideoAnalyze()" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        Phân Tích Video
+                    </button>
+                    <button class="btn-dna" id="btnDNAAnalyze" onclick="handleDNAAnalyze()" disabled>
+                        🧬 Phân Tích DNA Video
+                    </button>
+                    <button class="btn-dna" id="btnDNAUrl" onclick="handleDNAUrlAnalyze()">
+                        🧬 DNA từ URL
+                    </button>
+                </div>
+            </div>
+
+            <!-- Video Tab Results -->
+            <div class="results-section" id="videoResults" style="display:none;"></div>
+            <!-- DNA Results -->
+            <div class="results-section" id="dnaResults" style="display:none;"></div>
+        </section>
+        <section class="tab-content" id="panelReview">
+            <div class="input-section">
+                <div class="section-header">
+                    <h2>⭐ AI Đánh Giá Video Output</h2>
+                    <p>Upload video đã tạo bằng Veo 3.1 để AI chấm điểm và gợi ý cách cải thiện</p>
+                </div>
+
+                <div class="upload-zone" id="reviewUploadZone">
+                    <div class="upload-zone-inner">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <polygon
+                                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                        <p class="upload-text">Kéo thả video cần đánh giá hoặc <span>chọn file</span></p>
+                        <p class="upload-hint">Upload video đã tạo — Hỗ trợ đến 30 phút</p>
+                        <input type="file" id="reviewFileInput" accept="video/mp4,video/webm,video/quicktime" hidden>
+                    </div>
+                </div>
+
+                <div class="video-preview" id="reviewPreview" style="display:none;">
+                    <video id="reviewPlayer" controls></video>
+                    <div class="preview-info">
+                        <span id="reviewPreviewName"></span>
+                        <button class="btn-ghost" onclick="clearReviewUpload()">✕ Xóa</button>
+                    </div>
+                </div>
+
+                <button class="btn-primary" id="btnReviewVideo" onclick="handleVideoReview()" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon
+                            points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                    Đánh Giá Video
+                </button>
+            </div>
+
+            <!-- Review Tab Results -->
+            <div class="results-section" id="reviewResultsSection" style="display:none;"></div>
+        </section>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p class="loading-text" id="loadingText">AI đang xử lý...</p>
+                <p class="loading-subtext" id="loadingSubtext">Có thể mất 30-60 giây tùy độ dài video</p>
+            </div>
+        </div>
+
+
+    </main>
+
+    <!-- API Key Modal -->
+    <div class="modal-overlay" id="apiKeyModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🔑 Cấu Hình Gemini API Key</h3>
+                <button class="btn-ghost" onclick="toggleApiKeyModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:16px">Nhập Gemini API key từ Google
+                    AI Studio hoặc Google Cloud Console. Key sẽ được lưu tự động.</p>
+                <div class="form-group">
+                    <label for="apiKeyInput">API Key</label>
+                    <input type="password" id="apiKeyInput" placeholder="AIzaSy..."
+                        style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:12px 14px;font-family:var(--font-mono);font-size:0.9rem;color:var(--text-primary)">
+                </div>
+                <button class="btn-primary" onclick="saveApiKey()" style="margin-top:8px">
+                    💾 Lưu API Key
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preset Manager Modal -->
+    <div class="modal-overlay" id="presetManagerModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3>📂 Quản Lý Preset</h3>
+                <button class="btn-ghost" onclick="closePresetManager()">✕</button>
+            </div>
+            <div class="modal-body" id="presetManagerBody">
+                <p style="color:var(--text-secondary)">Chưa có preset nào. Phân tích DNA video để tạo preset mới.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Character Library Modal -->
+    <div class="modal-overlay" id="characterLibraryModal">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3>🎭 Thư Viện Nhân Vật</h3>
+                <button class="btn-ghost" onclick="closeCharacterLibrary()">✕</button>
+            </div>
+            <div class="modal-body" id="characterLibraryBody">
+                <p style="color:var(--text-secondary)">Chưa có nhân vật nào. Phân tích DNA video để lưu nhân vật.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="/js/app.js?v=20260226c"></script>
+</body>
+
+</html>
