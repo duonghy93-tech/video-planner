@@ -389,10 +389,10 @@ app.put('/api/roadmaps/:id/video-status', auth.authMiddleware, (req, res) => {
         const rm = roadmaps.find(r => r.id === req.params.id && r.userId === req.user.id);
         if (!rm) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y roadmap' });
 
-        const dayObj = rm.days?.find(d => d.day === day);
-        if (!dayObj) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y ng\u00e0y' });
+        const dayObj = rm.days?.find(d => d.day === parseInt(day));
+        if (!dayObj) return res.status(404).json({ error: 'Không tìm thấy ngày' });
 
-        const video = dayObj.videos?.find(v => v.slot === slot);
+        const video = dayObj.videos?.find(v => v.slot === parseInt(slot));
         if (!video) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y video' });
 
         if (status) video.status = status;
@@ -526,7 +526,12 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
         res.json({ success: true, metrics });
     } catch (err) {
         console.error('[scan] Error:', err.message);
-        res.status(500).json({ error: err.message });
+        // Friendly error message
+        let msg = 'Không thể quét video';
+        if (err.message.includes('429')) msg = 'YouTube tạm chặn, thử lại sau 5 phút';
+        else if (err.message.includes('not a bot')) msg = 'Cần cookies YouTube để quét trên cloud';
+        else if (err.message.includes('JavaScript')) msg = 'Platform này chưa hỗ trợ quét trên cloud';
+        res.status(500).json({ error: msg });
     }
 });
 
