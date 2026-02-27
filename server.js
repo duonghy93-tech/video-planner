@@ -358,7 +358,9 @@ app.post('/api/roadmaps/generate', auth.authMiddleware, async (req, res) => {
             createdAt: new Date().toISOString()
         };
 
-        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        let roadmaps = readJsonFile(ROADMAPS_FILE);
+        // Remove old roadmaps for this channel (keep only latest)
+        roadmaps = roadmaps.filter(r => !(r.channelId === channelId && r.userId === req.user.id));
         roadmaps.push(roadmap);
         writeJsonFile(ROADMAPS_FILE, roadmaps);
 
