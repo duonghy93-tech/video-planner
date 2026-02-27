@@ -134,6 +134,46 @@ app.get('/api/auth/me', auth.authMiddleware, (req, res) => {
     res.json({ user: req.user });
 });
 
+// ============ ADMIN ROUTES (admin only) ============
+app.get('/api/admin/overview', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const users = auth.getUsers();
+    const channels = readJsonFile(path.join(dataDir, 'channels.json'));
+    const roadmaps = readJsonFile(path.join(dataDir, 'roadmaps.json'));
+    res.json({
+        users: users.length,
+        channels: channels.length,
+        roadmaps: roadmaps.length,
+        userList: users.map(u => ({
+            id: u.id, username: u.username, name: u.name, role: u.role,
+            channelCount: channels.filter(c => c.userId === u.id).length,
+            roadmapCount: roadmaps.filter(r => r.userId === u.id).length
+        }))
+    });
+});
+
+app.get('/api/admin/channels', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const users = auth.getUsers();
+    const channels = readJsonFile(path.join(dataDir, 'channels.json'));
+    res.json(channels.map(c => ({
+        ...c,
+        ownerName: users.find(u => u.id === c.userId)?.username || 'unknown'
+    })));
+});
+
+app.get('/api/admin/roadmaps', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const users = auth.getUsers();
+    const channels = readJsonFile(path.join(dataDir, 'channels.json'));
+    const roadmaps = readJsonFile(path.join(dataDir, 'roadmaps.json'));
+    res.json(roadmaps.map(r => ({
+        ...r,
+        ownerName: users.find(u => u.id === r.userId)?.username || 'unknown',
+        channelName: channels.find(c => c.id === r.channelId)?.name || 'unknown'
+    })));
+});
+
 // ============ CHANNEL ROUTES ============
 const CHANNELS_FILE = path.join(dataDir, 'channels.json');
 const ROADMAPS_FILE = path.join(dataDir, 'roadmaps.json');
@@ -329,6 +369,70 @@ app.post('/api/roadmaps/:id/next', auth.authMiddleware, async (req, res) => {
         res.json({ success: true, roadmap: newRoadmap });
     } catch (err) {
         console.error('[roadmap-next] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============ SCAN PUBLISHED VIDEO (Phase 4) ============
+app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
+    try {
+        const { url, roadmapId, day, slot } = req.body;
+        if (!url) return res.status(400).json({ error: 'Thiếu URL video' });
+
+        // Use yt-dlp to get metadata
+        const ytdlpPath = path.join(__dirname, 'yt-dlp.exe');
+        if (!fs.existsSync(ytdlpPath)) {
+            return res.status(400).json({ error: 'yt-dlp.exe không tìm thấy' });
+        }
+
+        console.log(`🔍 Scanning: ${url}`);
+
+        const metadata = await new Promise((resolve, reject) => {
+            execFile(ytdlpPath, [
+                '--dump-json',
+                '--no-download',
+                url
+            ], { timeout: 30000 }, (err, stdout) => {
+                if (err) return reject(new Error('Không thể lấy metadata: ' + err.message));
+                try {
+                    resolve(JSON.parse(stdout));
+                } catch (e) {
+                    reject(new Error('Lỗi parse metadata'));
+                }
+            });
+        });
+
+        const metrics = {
+            views: metadata.view_count || 0,
+            likes: metadata.like_count || 0,
+            comments: metadata.comment_count || 0,
+            duration: metadata.duration || 0,
+            title: metadata.title || '',
+            uploadDate: metadata.upload_date || '',
+            channel: metadata.uploader || '',
+            scannedAt: new Date().toISOString()
+        };
+
+        // Save metrics to roadmap if provided
+        if (roadmapId && day && slot) {
+            const roadmaps = readJsonFile(ROADMAPS_FILE);
+            const rm = roadmaps.find(r => r.id === roadmapId && r.userId === req.user.id);
+            if (rm) {
+                const dayObj = rm.days?.find(d => d.day === parseInt(day));
+                const video = dayObj?.videos?.find(v => v.slot === parseInt(slot));
+                if (video) {
+                    video.metrics = metrics;
+                    video.publishedUrl = url;
+                    video.status = 'published';
+                    writeJsonFile(ROADMAPS_FILE, roadmaps);
+                }
+            }
+        }
+
+        console.log(`✅ Scanned: ${metrics.title} — ${metrics.views} views, ${metrics.likes} likes`);
+        res.json({ success: true, metrics });
+    } catch (err) {
+        console.error('[scan] Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

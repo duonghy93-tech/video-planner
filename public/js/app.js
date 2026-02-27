@@ -59,6 +59,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show user info
             const userEl = document.getElementById('userDisplay');
             if (userEl) userEl.textContent = `👤 ${data.user.username}`;
+            // Show admin tab if admin
+            if (data.user.role === 'admin') {
+                const adminTab = document.getElementById('tabAdmin');
+                if (adminTab) adminTab.style.display = '';
+            }
         })
         .catch(() => {
             localStorage.removeItem('auth_token');
@@ -105,6 +110,8 @@ function setupTabs() {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById(`panel${capitalize(tab)}`).classList.add('active');
+            // Auto-load admin data when tab is clicked
+            if (tab === 'admin') loadAdminDashboard();
         });
     });
 }
@@ -1863,8 +1870,9 @@ function renderRoadmap() {
                                     ${video.best_post_time ? `<span style="color:var(--text-secondary)">\ud83d\udd52 ${video.best_post_time}</span>` : ''}
                                 </div>
                                 ${video.hashtags?.length ? `<div style="margin-top:4px;font-size:0.75rem;color:var(--accent-purple)">${video.hashtags.join(' ')}</div>` : ''}
+                                ${video.metrics ? `<div style="margin-top:6px;display:flex;gap:12px;font-size:0.8rem;color:#10b981"><span>👁 ${(video.metrics.views || 0).toLocaleString()}</span><span>❤️ ${(video.metrics.likes || 0).toLocaleString()}</span><span>💬 ${(video.metrics.comments || 0).toLocaleString()}</span></div>` : ''}
                             </div>
-                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;min-width:100px">
+                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;min-width:140px">
                                 ${statusBadge}
                                 <select onchange="updateVideoStatus('${rm.id}', ${day.day}, ${video.slot}, this.value)" style="font-size:0.7rem;padding:2px 6px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:4px;color:var(--text-primary)">
                                     <option value="pending" ${status === 'pending' ? 'selected' : ''}>Ch\u01b0a l\u00e0m</option>
@@ -1872,6 +1880,7 @@ function renderRoadmap() {
                                     <option value="published" ${status === 'published' ? 'selected' : ''}>\u0110\u00e3 \u0111\u0103ng</option>
                                 </select>
                                 <button class="btn-ghost btn-sm" onclick="createPlanFromRoadmap('${video.title}', '${video.description?.replace(/'/g, "\\'") || ''}')" style="font-size:0.7rem" title="T\u1ea1o Video Plan">\ud83c\udfac Plan</button>
+                                <div style="display:flex;gap:2px;margin-top:2px"><input type="text" id="scan_${day.day}_${video.slot}" placeholder="URL đã đăng" value="${video.publishedUrl || ''}" style="font-size:0.65rem;padding:2px 4px;width:90px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:3px;color:var(--text-primary)"><button class="btn-ghost btn-sm" onclick="scanPublishedVideo('${rm.id}',${day.day},${video.slot})" style="font-size:0.65rem">🔍</button></div>
                             </div>
                         </div>
                     </div>`;
@@ -1929,4 +1938,177 @@ function createPlanFromRoadmap(title, description) {
         if (descInput) descInput.value = title + '\n\n' + description;
         showToast('\ud83c\udfac M\u00f4 t\u1ea3 video \u0111\u00e3 \u0111i\u1ec1n s\u1eb5n, nh\u1ea5n "T\u1ea1o Plan" \u0111\u1ec3 ti\u1ebfp t\u1ee5c!');
     }, 300);
+}
+
+// ============ ADMIN DASHBOARD ============
+async function loadAdminDashboard() {
+    try {
+        const res = await fetch('/api/admin/overview', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Stats cards
+        const statsEl = document.getElementById('adminStats');
+        if (statsEl) {
+            statsEl.innerHTML = `
+                <div class="dna-card" style="text-align:center">
+                    <div style="font-size:2rem;font-weight:800;color:var(--accent-purple)">${data.users}</div>
+                    <div style="color:var(--text-secondary);font-size:0.85rem">\ud83d\udc65 Nh\u00e2n vi\u00ean</div>
+                </div>
+                <div class="dna-card" style="text-align:center">
+                    <div style="font-size:2rem;font-weight:800;color:#10b981">${data.channels}</div>
+                    <div style="color:var(--text-secondary);font-size:0.85rem">\ud83d\udcfa K\u00eanh</div>
+                </div>
+                <div class="dna-card" style="text-align:center">
+                    <div style="font-size:2rem;font-weight:800;color:#f59e0b">${data.roadmaps}</div>
+                    <div style="color:var(--text-secondary);font-size:0.85rem">\ud83d\uddd3\ufe0f Roadmaps</div>
+                </div>`;
+        }
+
+        // Users list
+        const userListEl = document.getElementById('adminUserList');
+        if (userListEl && data.userList) {
+            userListEl.innerHTML = data.userList.map(u => `
+                <div class="dna-card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <strong>${u.role === 'admin' ? '\ud83d\udc51' : '\ud83d\udc64'} ${u.name || u.username}</strong>
+                        <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">@${u.username} \u2022 ${u.role}</span>
+                        <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">\ud83d\udcfa ${u.channelCount} k\u00eanh \u2022 \ud83d\uddd3\ufe0f ${u.roadmapCount} roadmaps</span>
+                    </div>
+                    ${u.role !== 'admin' ? `<button class="btn-ghost btn-danger btn-sm" onclick="deleteUserAdmin('${u.id}')" title="X\u00f3a">\ud83d\uddd1\ufe0f</button>` : ''}
+                </div>`).join('');
+        }
+
+        // Load all channels
+        const chRes = await fetch('/api/admin/channels', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (chRes.ok) {
+            const channels = await chRes.json();
+            const chListEl = document.getElementById('adminChannelList');
+            if (chListEl) {
+                if (!channels.length) {
+                    chListEl.innerHTML = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 k\u00eanh n\u00e0o</p>';
+                } else {
+                    chListEl.innerHTML = channels.map(c => `
+                        <div class="dna-card" style="margin-bottom:8px">
+                            <div style="display:flex;justify-content:space-between">
+                                <div>
+                                    <strong>\ud83d\udcfa ${c.name}</strong>
+                                    <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">by @${c.ownerName}</span>
+                                </div>
+                                <span style="color:var(--text-secondary);font-size:0.8rem">${c.niche || ''} \u2022 ${c.language} \u2022 ${c.postsPerDay} video/ng\u00e0y</span>
+                            </div>
+                        </div>`).join('');
+                }
+            }
+        }
+
+        // Load all roadmaps
+        const rmRes = await fetch('/api/admin/roadmaps', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (rmRes.ok) {
+            const roadmaps = await rmRes.json();
+            const rmListEl = document.getElementById('adminRoadmapList');
+            if (rmListEl) {
+                if (!roadmaps.length) {
+                    rmListEl.innerHTML = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 roadmap n\u00e0o</p>';
+                } else {
+                    rmListEl.innerHTML = roadmaps.map(r => {
+                        const totalVideos = r.days?.reduce((sum, d) => sum + (d.videos?.length || 0), 0) || 0;
+                        const published = r.days?.reduce((sum, d) => sum + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
+                        return `
+                        <div class="dna-card" style="margin-bottom:8px">
+                            <div style="display:flex;justify-content:space-between">
+                                <div>
+                                    <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
+                                    <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">\ud83d\udcfa ${r.channelName} \u2022 by @${r.ownerName}</span>
+                                </div>
+                                <span style="color:var(--text-secondary);font-size:0.8rem">${r.week_start || ''} \u2022 ${published}/${totalVideos} \u0111\u00e3 \u0111\u0103ng</span>
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            }
+        }
+
+    } catch (e) {
+        console.error('Admin load error:', e);
+    }
+}
+
+async function createUser() {
+    const username = document.getElementById('newUsername')?.value.trim();
+    const password = document.getElementById('newPassword')?.value;
+    const name = document.getElementById('newName')?.value.trim();
+    if (!username || !password) { showToast('\u26a0\ufe0f Nh\u1eadp username v\u00e0 password'); return; }
+
+    try {
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ username, password, name, role: 'editor' })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showToast('\u2705 \u0110\u00e3 t\u1ea1o t\u00e0i kho\u1ea3n: ' + username);
+        document.getElementById('newUsername').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('newName').value = '';
+        loadAdminDashboard();
+    } catch (err) {
+        showToast('\u274c ' + err.message);
+    }
+}
+
+async function deleteUserAdmin(userId) {
+    if (!confirm('X\u00f3a t\u00e0i kho\u1ea3n n\u00e0y?')) return;
+    try {
+        await fetch('/api/auth/users/' + userId, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        showToast('\ud83d\uddd1\ufe0f \u0110\u00e3 x\u00f3a');
+        loadAdminDashboard();
+    } catch (err) {
+        showToast('\u274c ' + err.message);
+    }
+}
+
+// ============ SCAN PUBLISHED VIDEO ============
+async function scanPublishedVideo(roadmapId, day, slot) {
+    const input = document.getElementById(`scan_${day}_${slot}`);
+    const url = input?.value?.trim();
+    if (!url) { showToast('\u26a0\ufe0f Paste URL video \u0111\u00e3 \u0111\u0103ng'); return; }
+
+    showToast('\ud83d\udd0d \u0110ang qu\u00e9t video...');
+    try {
+        const res = await fetch('/api/scan-published', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ url, roadmapId, day, slot })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showToast(`\u2705 ${data.metrics.title}: ${(data.metrics.views || 0).toLocaleString()} views, ${(data.metrics.likes || 0).toLocaleString()} likes`);
+
+        // Reload roadmap to show updated metrics
+        if (currentRoadmapChannelId) {
+            const rmRes = await fetch('/api/roadmaps/' + currentRoadmapChannelId, {
+                headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+            });
+            const roadmaps = await rmRes.json();
+            if (roadmaps.length > 0) {
+                currentRoadmap = roadmaps[0];
+                renderRoadmap();
+            }
+        }
+    } catch (err) {
+        showToast('\u274c ' + err.message);
+    }
 }
