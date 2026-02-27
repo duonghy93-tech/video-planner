@@ -2156,8 +2156,9 @@ async function loadAdminDashboard() {
                     rmListEl.innerHTML = roadmaps.map(r => {
                         const totalVideos = r.days?.reduce((sum, d) => sum + (d.videos?.length || 0), 0) || 0;
                         const published = r.days?.reduce((sum, d) => sum + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
+                        const rmJson = JSON.stringify(r).replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         return `
-                        <div class="dna-card" style="margin-bottom:8px">
+                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="currentRoadmapChannelId='${r.channelId}';currentRoadmap=JSON.parse(this.dataset.rm);switchTab('channels');setTimeout(()=>renderRoadmap(),100);" data-rm='${JSON.stringify(r).replace(/'/g, "\\'")}'>
                             <div style="display:flex;justify-content:space-between">
                                 <div>
                                     <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
