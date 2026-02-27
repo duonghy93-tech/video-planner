@@ -482,12 +482,21 @@
                 <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:16px">Nhập Gemini API key từ Google
                     AI Studio hoặc Google Cloud Console. Key sẽ được lưu tự động.</p>
                 <div class="form-group">
-                    <label for="apiKeyInput">API Key</label>
+                    <label for="apiKeyInput">Gemini API Key</label>
                     <input type="password" id="apiKeyInput" placeholder="AIzaSy..."
                         style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:12px 14px;font-family:var(--font-mono);font-size:0.9rem;color:var(--text-primary)">
                 </div>
+                <div class="form-group" style="margin-top:12px">
+                    <label for="youtubeApiKeyInput">YouTube Data API Key <span
+                            style="font-size:0.75rem;color:var(--text-secondary)">(để quét metrics
+                            YouTube)</span></label>
+                    <input type="password" id="youtubeApiKeyInput" placeholder="AIzaSy..."
+                        style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:12px 14px;font-family:var(--font-mono);font-size:0.9rem;color:var(--text-primary)">
+                    <small style="color:var(--text-secondary);font-size:0.7rem">Tạo từ console.cloud.google.com →
+                        YouTube Data API v3</small>
+                </div>
                 <button class="btn-primary" onclick="saveApiKey()" style="margin-top:8px">
-                    💾 Lưu API Key
+                    💾 Lưu API Keys
                 </button>
             </div>
         </div>

@@ -84,6 +84,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const input = document.getElementById('apiKeyInput');
         if (input) input.value = savedKey;
     }
+
+    // Load YouTube API key status
+    fetch('/api/settings/youtube-key', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+            if (d && d.hasKey) {
+                const ytInput = document.getElementById('youtubeApiKeyInput');
+                if (ytInput) ytInput.placeholder = 'Đã lưu: ' + d.key;
+            }
+        }).catch(() => { });
 });
 
 // ============ API STATUS ============
@@ -1118,16 +1128,25 @@ function toggleApiKeyModal() {
 }
 
 async function saveApiKey() {
-    const input = document.getElementById('apiKeyInput');
-    const key = input.value.trim();
-    if (!key || key.length < 10) {
-        showToast('⚠️ API key không hợp lệ');
-        return;
+    const geminiKey = document.getElementById('apiKeyInput').value.trim();
+    const youtubeKey = document.getElementById('youtubeApiKeyInput')?.value?.trim();
+
+    if (geminiKey && geminiKey.length >= 10) {
+        setStoredApiKey(geminiKey);
     }
 
-    // Save to localStorage (per-user, per-browser)
-    setStoredApiKey(key);
-    showToast('✅ API Key đã được lưu trong trình duyệt của bạn!');
+    // Save YouTube API key to server
+    if (youtubeKey) {
+        try {
+            await fetch('/api/settings/youtube-key', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ key: youtubeKey })
+            });
+        } catch (e) { console.error('Failed to save YouTube key'); }
+    }
+
+    showToast('\u2705 API Keys \u0111\u00e3 \u0111\u01b0\u1ee3c l\u01b0u!');
     toggleApiKeyModal();
     checkApiStatus();
 }

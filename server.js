@@ -258,6 +258,26 @@ app.post('/api/channels/:id/strategy', auth.authMiddleware, async (req, res) => 
 // ============ CHANNEL ROUTES ============
 const CHANNELS_FILE = path.join(dataDir, 'channels.json');
 const ROADMAPS_FILE = path.join(dataDir, 'roadmaps.json');
+const SETTINGS_FILE = path.join(dataDir, 'settings.json');
+
+// YouTube API key management (GUI-configurable)
+app.post('/api/settings/youtube-key', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const { key } = req.body;
+    if (!key) return res.status(400).json({ error: 'Missing key' });
+    const settings = readJsonFile(SETTINGS_FILE) || {};
+    settings.youtubeApiKey = key;
+    writeJsonFile(SETTINGS_FILE, settings);
+    process.env.YOUTUBE_API_KEY = key; // Also set in memory
+    console.log('\u2705 YouTube API Key updated from GUI');
+    res.json({ success: true });
+});
+
+app.get('/api/settings/youtube-key', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const settings = readJsonFile(SETTINGS_FILE) || {};
+    res.json({ hasKey: !!settings.youtubeApiKey, key: settings.youtubeApiKey ? '***' + settings.youtubeApiKey.slice(-4) : '' });
+});
 
 // Get user's channels
 app.get('/api/channels', auth.authMiddleware, (req, res) => {
@@ -1312,10 +1332,20 @@ app.listen(PORT, () => {
         console.log('✅ Gemini API Key loaded from .env\n');
     }
 
+    // Load YouTube API key from settings if not in env
+    if (!process.env.YOUTUBE_API_KEY) {
+        try {
+            const settings = readJsonFile(path.join(dataDir, 'settings.json')) || {};
+            if (settings.youtubeApiKey) {
+                process.env.YOUTUBE_API_KEY = settings.youtubeApiKey;
+            }
+        } catch (e) { }
+    }
+
     if (process.env.YOUTUBE_API_KEY) {
         console.log('✅ YouTube Data API Key loaded — scan YouTube trên cloud OK\n');
     } else {
-        console.log('⚠️  YouTube API Key chưa cấu hình — scan YouTube chỉ dùng yt-dlp\n');
+        console.log('⚠️  YouTube API Key chưa cấu hình — nhập từ GUI hoặc env\n');
     }
 
     // Check yt-dlp
