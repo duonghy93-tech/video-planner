@@ -11,6 +11,18 @@ const sharp = require('sharp');
 let gemini = require('./gemini-service');
 const auth = require('./auth');
 
+// Cross-platform yt-dlp path
+function getYtdlpCmd() {
+    const bin = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+    const localPath = path.join(__dirname, bin);
+    if (fs.existsSync(localPath)) return localPath;
+    // Fallback: system-installed yt-dlp
+    try {
+        require('child_process').execSync('yt-dlp --version', { stdio: 'ignore' });
+        return 'yt-dlp';
+    } catch (e) { return null; }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -452,9 +464,9 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
         if (!url) return res.status(400).json({ error: 'Thiếu URL video' });
 
         // Use yt-dlp to get metadata
-        const ytdlpPath = path.join(__dirname, 'yt-dlp.exe');
-        if (!fs.existsSync(ytdlpPath)) {
-            return res.status(400).json({ error: 'yt-dlp.exe không tìm thấy' });
+        const ytdlpPath = getYtdlpCmd();
+        if (!ytdlpPath) {
+            return res.status(400).json({ error: 'yt-dlp không tìm thấy. Cài đặt: pip install yt-dlp' });
         }
 
         console.log(`🔍 Scanning: ${url}`);
@@ -511,8 +523,8 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
 
 // ============ AUTO-SCAN SCHEDULER ============
 async function scanSingleUrl(url) {
-    const ytdlpPath = path.join(__dirname, 'yt-dlp.exe');
-    if (!fs.existsSync(ytdlpPath)) return null;
+    const ytdlpPath = getYtdlpCmd();
+    if (!ytdlpPath) return null;
 
     return new Promise((resolve) => {
         execFile(ytdlpPath, ['--dump-json', '--no-download', url], { timeout: 30000 }, (err, stdout) => {
@@ -771,20 +783,11 @@ function downloadWithYtDlp(url) {
         const tempDir = path.join(__dirname, 'output', 'temp_' + Date.now());
         fs.mkdirSync(tempDir, { recursive: true });
         const outputTemplate = path.join(tempDir, 'video.%(ext)s');
-        const ytdlpBin = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-        const ytdlpPath = path.join(__dirname, ytdlpBin);
+        const ytdlpCmd = getYtdlpCmd();
 
-        // Fallback to system-installed yt-dlp
-        const ytdlpCmd = fs.existsSync(ytdlpPath) ? ytdlpPath : 'yt-dlp';
-
-        if (!fs.existsSync(ytdlpPath)) {
-            // Check if yt-dlp is available globally
-            try {
-                require('child_process').execSync('yt-dlp --version', { stdio: 'ignore' });
-            } catch (e) {
-                fs.rmSync(tempDir, { recursive: true, force: true });
-                return reject(new Error('yt-dlp không tìm thấy. Cài đặt yt-dlp hoặc đặt binary trong thư mục project.'));
-            }
+        if (!ytdlpCmd) {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+            return reject(new Error('yt-dlp không tìm thấy. Cài đặt: pip install yt-dlp'));
         }
 
         const args = [
@@ -1201,11 +1204,11 @@ app.listen(PORT, () => {
     }
 
     // Check yt-dlp
-    const ytdlpPath = path.join(__dirname, 'yt-dlp.exe');
-    if (fs.existsSync(ytdlpPath)) {
-        console.log('✅ yt-dlp.exe found — hỗ trợ tải video từ YouTube, TikTok, Facebook, Instagram...\n');
+    const ytdlpCmd = getYtdlpCmd();
+    if (ytdlpCmd) {
+        console.log(`✅ yt-dlp found (${ytdlpCmd}) — hỗ trợ tải video từ YouTube, TikTok, Facebook, Instagram...\n`);
     } else {
-        console.log('⚠️  yt-dlp.exe not found — chỉ hỗ trợ link video trực tiếp\n');
+        console.log('⚠️  yt-dlp not found — cài đặt: pip install yt-dlp\n');
     }
 
     // Create default admin

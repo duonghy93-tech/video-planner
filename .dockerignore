@@ -1,7 +1,8 @@
 node_modules
-output
-*.exe
 .env
+data/
+output/
+yt-dlp.exe
+*.log
 .git
 .gitignore
-*.md
