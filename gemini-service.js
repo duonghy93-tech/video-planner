@@ -12,6 +12,29 @@ const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 const flashModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 const proModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
+// Safe JSON parser — handles markdown fences and extra text
+function safeJsonParse(text) {
+    // Remove markdown code fences
+    let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // Try direct parse
+    try { return JSON.parse(cleaned); } catch (e) { }
+
+    // Try extracting JSON object
+    const objMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+        try { return JSON.parse(objMatch[0]); } catch (e) { }
+    }
+
+    // Try extracting JSON array
+    const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+        try { return JSON.parse(arrMatch[0]); } catch (e) { }
+    }
+
+    throw new Error('AI response is not valid JSON');
+}
+
 // ============ VIDEO FILE UPLOAD ============
 async function uploadVideoForAnalysis(videoBuffer, mimeType) {
     // Save buffer to temp file
