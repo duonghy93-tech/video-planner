@@ -291,6 +291,14 @@ async function generatePlan(description, durationSeconds, langFormat, preset) {
     let presetInstructions = '';
     if (preset) {
         presetInstructions = `\n\n=== PRESET APPLIED (MUST FOLLOW) ===\n`;
+
+        // Custom preset: raw text rules from user
+        if (preset.type === 'custom' && preset.custom_rules) {
+            presetInstructions += `CUSTOM PRODUCTION RULES (follow ALL of these strictly):\n`;
+            presetInstructions += preset.custom_rules + '\n';
+        }
+
+        // DNA-based preset
         if (preset.style_dna) {
             presetInstructions += `STYLE DNA (apply these EXACT visual parameters):\n`;
             presetInstructions += `- Overall style: ${preset.style_dna.overall_style || ''}\n`;

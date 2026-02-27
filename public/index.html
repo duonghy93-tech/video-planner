@@ -90,8 +90,10 @@
                             <select id="presetSelect">
                                 <option value="">-- Không dùng preset --</option>
                             </select>
-                            <button class="btn-secondary btn-sm" onclick="openPresetManager()" title="Quản lý Preset">⚙️</button>
-                            <button class="btn-secondary btn-sm" onclick="openCharacterLibrary()" title="Thư viện Nhân vật">🎭</button>
+                            <button class="btn-secondary btn-sm" onclick="openPresetManager()"
+                                title="Quản lý Preset">⚙️</button>
+                            <button class="btn-secondary btn-sm" onclick="openCharacterLibrary()"
+                                title="Thư viện Nhân vật">🎭</button>
                         </div>
                     </div>
                     <div class="preset-badge" id="presetBadge" style="display:none;"></div>
@@ -127,8 +129,8 @@
                     <div class="form-group">
                         <label for="engineSelect">Engine tạo ảnh</label>
                         <select id="engineSelect">
-                            <option value="gemini">Gemini Flash (Nhanh)</option>
                             <option value="imagen">Imagen 4 (Chất lượng cao)</option>
+                            <option value="gemini">Gemini Flash (Nhanh)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -213,8 +215,8 @@
                     <div class="form-group">
                         <label for="engineSelectVideo">Engine tạo ảnh</label>
                         <select id="engineSelectVideo">
-                            <option value="gemini">Gemini Flash (Nhanh)</option>
                             <option value="imagen">Imagen 4 (Chất lượng cao)</option>
+                            <option value="gemini">Gemini Flash (Nhanh)</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -228,7 +230,8 @@
 
                 <div class="btn-row">
                     <button class="btn-primary" id="btnAnalyzeVideo" onclick="handleVideoAnalyze()" disabled>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
                             <circle cx="11" cy="11" r="8" />
                             <line x1="21" y1="21" x2="16.65" y2="16.65" />
                         </svg>
@@ -330,8 +333,38 @@
                 <h3>📂 Quản Lý Preset</h3>
                 <button class="btn-ghost" onclick="closePresetManager()">✕</button>
             </div>
-            <div class="modal-body" id="presetManagerBody">
-                <p style="color:var(--text-secondary)">Chưa có preset nào. Phân tích DNA video để tạo preset mới.</p>
+            <div class="modal-body">
+                <!-- Create Custom Preset -->
+                <div class="dna-card" style="margin-bottom:20px;border:1px dashed var(--accent-purple)">
+                    <h3>✍️ Tạo Preset Thủ Công</h3>
+                    <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:12px">
+                        Paste rules/instructions từ ChatGPT hoặc tự viết. AI sẽ tuân theo khi tạo video plan.
+                    </p>
+                    <div class="form-group">
+                        <label>Tên Preset</label>
+                        <input type="text" id="customPresetName"
+                            placeholder="VD: Fix It BRO Style, Clean Kitchen Tips..."
+                            style="width:100%;background:var(--bg-input);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:12px 14px;font-size:0.9rem;color:var(--text-primary)">
+                    </div>
+                    <div class="form-group">
+                        <label>Rules & Instructions</label>
+                        <textarea id="customPresetRules" rows="10" placeholder="Paste toàn bộ rules vào đây...
+VD:
+- Vibe: cà khịa, chợ búa, nhịp nhanh
+- 8 giây/clip, hook 0-1.2s, pattern interrupt 2.2-2.5s
+- Ảnh 9:16 EXACT 1080×1920
+- Voice: English US
+- CTA: Comment 'TOOL' to get the link
+..."></textarea>
+                    </div>
+                    <button class="btn-dna-save" onclick="saveCustomPreset()">💾 Lưu Custom Preset</button>
+                </div>
+
+                <!-- Saved Presets List -->
+                <h3 style="margin-bottom:12px">📋 Preset Đã Lưu</h3>
+                <div id="presetManagerBody">
+                    <p style="color:var(--text-secondary)">Chưa có preset nào.</p>
+                </div>
             </div>
         </div>
     </div>

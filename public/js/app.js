@@ -1423,11 +1423,49 @@ async function savePresetFromDNA() {
     }
 }
 
+// Save custom preset from manual text input
+async function saveCustomPreset() {
+    const nameInput = document.getElementById('customPresetName');
+    const rulesInput = document.getElementById('customPresetRules');
+    const name = nameInput.value.trim();
+    const rules = rulesInput.value.trim();
+
+    if (!name) { showToast('⚠️ Nhập tên preset'); return; }
+    if (!rules || rules.length < 20) { showToast('⚠️ Rules quá ngắn (tối thiểu 20 ký tự)'); return; }
+
+    try {
+        const presetData = {
+            type: 'custom',
+            custom_rules: rules,
+            source: 'manual'
+        };
+
+        const res = await fetch('/api/presets', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ name, data: presetData })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showToast('✅ Đã lưu custom preset: ' + name);
+        nameInput.value = '';
+        rulesInput.value = '';
+        await loadPresets();
+
+        // Refresh preset list in modal
+        openPresetManager();
+    } catch (err) {
+        showToast('❌ Lỗi: ' + err.message);
+    }
+}
+
 async function deletePreset(id) {
     if (!confirm('Xóa preset này?')) return;
     try {
         await fetch('/api/presets/' + id, { method: 'DELETE' });
-        showToast('✅ Đã xóa preset');
+        showToast('🗑️ Đã xóa preset');
         await loadPresets();
         openPresetManager(); // refresh
     } catch (err) {
@@ -1440,23 +1478,25 @@ function openPresetManager() {
     const body = document.getElementById('presetManagerBody');
 
     if (!savedPresets.length) {
-        body.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px 0">Chưa có preset nào.<br>Phân tích DNA video để tạo preset mới.</p>';
+        body.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px 0">Chưa có preset nào.</p>';
     } else {
         body.innerHTML = `
             <div class="preset-list">
                 ${savedPresets.map(p => {
             const d = p.data;
+            const isCustom = d.type === 'custom';
             return `
                         <div class="preset-list-item">
                             <div class="preset-list-info">
-                                <div class="preset-list-name">${p.name}</div>
+                                <div class="preset-list-name">${isCustom ? '✍️' : '🧬'} ${p.name}</div>
                                 <div class="preset-list-meta">
                                     ${new Date(p.createdAt).toLocaleString('vi')}
-                                    ${d.video_dna?.overall_score ? ` · ⭐ ${d.video_dna.overall_score}/100` : ''}
-                                    ${d.video_dna?.category ? ` · 📁 ${d.video_dna.category}` : ''}
-                                    ${d.characters?.length ? ` · 🎭 ${d.characters.length} nhân vật` : ''}
+                                    ${isCustom ? ' · 📝 Custom Rules' : ''}
+                                    ${!isCustom && d.video_dna?.overall_score ? ` · ⭐ ${d.video_dna.overall_score}/100` : ''}
+                                    ${!isCustom && d.characters?.length ? ` · 🎭 ${d.characters.length} nhân vật` : ''}
                                 </div>
-                                ${d.style_dna?.overall_style ? `<div class="preset-list-style">🎨 ${d.style_dna.overall_style.substring(0, 80)}...</div>` : ''}
+                                ${isCustom ? `<div class="preset-list-style">📋 ${d.custom_rules.substring(0, 100)}...</div>` : ''}
+                                ${!isCustom && d.style_dna?.overall_style ? `<div class="preset-list-style">🎨 ${d.style_dna.overall_style.substring(0, 80)}...</div>` : ''}
                             </div>
                             <button class="btn-ghost btn-danger" onclick="deletePreset('${p.id}')">🗑️</button>
                         </div>`;
