@@ -1889,7 +1889,14 @@ function closeStrategyChat() {
 async function generateRoadmapAfterBrief() {
     closeStrategyChat();
     if (strategyChatChannelId) {
-        await generateNewRoadmap(strategyChatChannelId);
+        const daysInput = prompt('Số ngày Roadmap (7, 10, 14 hoặc nhập số khác):', '7');
+        if (!daysInput) return;
+        const days = parseInt(daysInput);
+        if (isNaN(days) || days < 1 || days > 30) {
+            showToast('⚠️ Nhập số từ 1-30');
+            return;
+        }
+        await generateNewRoadmap(strategyChatChannelId, null, days);
     }
 }
 
