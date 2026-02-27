@@ -725,8 +725,7 @@ RULES:
 }
 
 // ============ ROADMAP GENERATION ============
-async function generateRoadmap(channel, preset, startDate) {
-    const days = 7;
+async function generateRoadmap(channel, preset, startDate, days = 7) {
     const perDay = channel.postsPerDay || 2;
     const totalVideos = days * perDay;
 
@@ -737,27 +736,23 @@ async function generateRoadmap(channel, preset, startDate) {
         }
         if (preset.style_dna) {
             presetRules += `\nSTYLE: ${preset.style_dna.overall_style || ''}`;
-            presetRules += `\nMOOD: ${preset.style_dna.mood || ''}`;
-        }
-        if (preset.hook_strategy) {
-            presetRules += `\nHOOK: ${preset.hook_strategy.hook_type || ''} — ${preset.hook_strategy.hook_description || ''}`;
         }
     }
 
     const prompt = `You are an expert social media content strategist.
 
-Create a ${days}-day content roadmap for this channel:
+Create a ${days}-day content roadmap with TOPIC IDEAS for this channel:
 - Channel: ${channel.name}
 - Niche: ${channel.niche || 'General'}
 - Description: ${channel.description || 'N/A'}
 - Target language: ${channel.language === 'VN' ? 'Vietnamese' : 'English (US)'}
 - Posts per day: ${perDay}
-- Total videos needed: ${totalVideos}
+- Total topics needed: ${totalVideos}
 - Start date: ${startDate || new Date().toISOString().split('T')[0]}
 - Platforms: ${Object.entries(channel.socialLinks || {}).filter(([k, v]) => v).map(([k]) => k).join(', ') || 'TikTok, YouTube'}
 ${presetRules}
 ${channel.brief ? `
-CHANNEL BRIEF (from strategy interview — MUST follow closely):
+CHANNEL BRIEF (MUST follow closely):
 - Target Audience: ${channel.brief.target_audience || 'N/A'}
 - Tone & Voice: ${channel.brief.tone || 'N/A'}
 - Products/Services: ${channel.brief.products || 'N/A'}
@@ -766,18 +761,18 @@ CHANNEL BRIEF (from strategy interview — MUST follow closely):
 - CTA Strategy: ${channel.brief.cta_strategy || 'N/A'}
 - Dos and Don'ts: ${channel.brief.dos_and_donts || 'N/A'}
 ` : ''}
-REQUIREMENTS:
-1. Each video idea must be UNIQUE and specific (not generic)
-2. Mix content types: educational, entertaining, trending, emotional
-3. Include viral hooks that grab attention in 0-2 seconds
-4. Each day should have variety (don't repeat same format)
-5. Include trending topics and seasonal relevance
-6. Optimize for short-form video (8-30 seconds)
-7. Think about what makes people STOP SCROLLING
+IMPORTANT: This is a TOPIC PLANNER only. The employee will use these topics to create AI-generated videos separately.
+Each topic should be a clear, specific idea that can be turned into a video.
 
-Return ONLY valid JSON (no markdown, no code blocks):
+REQUIREMENTS:
+1. Each topic must be UNIQUE and specific (not generic)
+2. Mix content types: educational, entertaining, trending, viral
+3. Think about what makes people STOP SCROLLING
+4. Topics should be trendy and relevant to the niche
+
+Return ONLY valid JSON:
 {
-  "roadmap_name": "Week plan title",
+  "roadmap_name": "Plan title",
   "channel": "${channel.name}",
   "week_start": "${startDate || new Date().toISOString().split('T')[0]}",
   "total_videos": ${totalVideos},
@@ -786,24 +781,20 @@ Return ONLY valid JSON (no markdown, no code blocks):
       "day": 1,
       "date": "YYYY-MM-DD",
       "day_name": "Monday/Tuesday/etc",
-      "theme": "Day theme (e.g., 'Hack Day', 'Before/After')",
+      "theme": "Day theme",
       "videos": [
         {
           "slot": 1,
-          "title": "Catchy video title (max 60 chars)",
-          "description": "What happens in this video (2-3 sentences)",
-          "hook": "Opening hook text (what viewer sees/hears in first 2 sec)",
-          "content_type": "hack/tip/before-after/reaction/tutorial/story",
-          "viral_angle": "Why this would go viral",
-          "keywords": ["keyword1", "keyword2", "keyword3"],
+          "title": "Chủ đề video (clear, specific topic)",
+          "idea": "Ý tưởng ngắn 1-2 câu mô tả nội dung",
+          "content_type": "educational/entertaining/trending/viral/tutorial/story",
           "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
-          "best_post_time": "HH:MM",
-          "estimated_duration": "8s/15s/30s"
+          "best_post_time": "HH:MM"
         }
       ]
     }
   ],
-  "weekly_strategy": "Overall strategy explanation for this week"
+  "weekly_strategy": "Overall strategy explanation"
 }`;
 
     const result = await proModel.generateContent(prompt);

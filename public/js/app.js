@@ -1789,8 +1789,16 @@ async function generateRoadmap(channelId) {
         return;
     }
 
-    // Has brief — generate roadmap
-    await generateNewRoadmap(channelId);
+    // Ask for number of days
+    const daysInput = prompt('Số ngày Roadmap (7, 10, 14 hoặc nhập số khác):', '7');
+    if (!daysInput) return;
+    const days = parseInt(daysInput);
+    if (isNaN(days) || days < 1 || days > 30) {
+        showToast('⚠️ Nhập số từ 1-30');
+        return;
+    }
+
+    await generateNewRoadmap(channelId, null, days);
 }
 
 // ============ STRATEGY CHAT ============
@@ -1885,14 +1893,14 @@ async function generateRoadmapAfterBrief() {
     }
 }
 
-async function generateNewRoadmap(channelId, startDate) {
-    showLoading('\ud83d\uddd3\ufe0f AI \u0111ang t\u1ea1o Roadmap 7 ng\u00e0y...', 'Ph\u00e2n t\u00edch niche, trend, v\u00e0 t\u1ea1o \u00fd t\u01b0\u1edfng video');
+async function generateNewRoadmap(channelId, startDate, days = 7) {
+    showLoading(`🗓️ AI đang tạo Roadmap ${days} ngày...`, 'Phân tích niche, trend, và tạo ý tưởng chủ đề');
 
     try {
         const res = await fetch('/api/roadmaps/generate', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ channelId, startDate })
+            body: JSON.stringify({ channelId, startDate, days })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
@@ -1961,26 +1969,26 @@ function renderRoadmap() {
                     <div style="background:rgba(15,12,41,0.4);border:1px solid var(--border-light);border-radius:10px;padding:12px;margin-bottom:8px">
                         <div style="display:flex;justify-content:space-between;align-items:flex-start">
                             <div style="flex:1">
-                                <div style="font-weight:600;font-size:0.95rem">\ud83c\udfac ${video.title}</div>
-                                <div style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px">${video.description || ''}</div>
-                                ${video.hook ? `<div style="margin-top:6px;font-size:0.8rem"><span style="color:#f59e0b">\ud83c\udfa3 Hook:</span> <em>"${video.hook}"</em></div>` : ''}
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <span style="font-weight:600;font-size:0.95rem">\ud83c\udfac ${video.title}</span>
+                                    <button class="btn-ghost" onclick="navigator.clipboard.writeText('${video.title.replace(/'/g, "\\'")}');showToast('\ud83d\udccb \u0110\u00e3 copy ch\u1ee7 \u0111\u1ec1!')" style="font-size:0.65rem;padding:1px 4px" title="Copy ch\u1ee7 \u0111\u1ec1">\ud83d\udccb</button>
+                                </div>
+                                ${video.idea ? `<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px">\ud83d\udca1 ${video.idea}</div>` : ''}
                                 <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;font-size:0.75rem">
                                     ${video.content_type ? `<span style="background:rgba(236,72,153,0.15);color:#ec4899;padding:1px 6px;border-radius:4px">${video.content_type}</span>` : ''}
-                                    ${video.estimated_duration ? `<span style="color:var(--text-secondary)">\u23f1 ${video.estimated_duration}</span>` : ''}
                                     ${video.best_post_time ? `<span style="color:var(--text-secondary)">\ud83d\udd52 ${video.best_post_time}</span>` : ''}
                                 </div>
                                 ${video.hashtags?.length ? `<div style="margin-top:4px;font-size:0.75rem;color:var(--accent-purple)">${video.hashtags.join(' ')}</div>` : ''}
-                                ${video.metrics ? `<div style="margin-top:6px;display:flex;gap:12px;font-size:0.8rem;color:#10b981"><span>👁 ${(video.metrics.views || 0).toLocaleString()}</span><span>❤️ ${(video.metrics.likes || 0).toLocaleString()}</span><span>💬 ${(video.metrics.comments || 0).toLocaleString()}</span></div>` : ''}
+                                ${video.metrics ? `<div style="margin-top:6px;display:flex;gap:12px;font-size:0.8rem;color:#10b981"><span>\ud83d\udc41 ${(video.metrics.views || 0).toLocaleString()}</span><span>\u2764\ufe0f ${(video.metrics.likes || 0).toLocaleString()}</span><span>\ud83d\udcac ${(video.metrics.comments || 0).toLocaleString()}</span></div>` : ''}
                             </div>
                             <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;min-width:140px">
                                 ${statusBadge}
                                 <select onchange="updateVideoStatus('${rm.id}', ${day.day}, ${video.slot}, this.value)" style="font-size:0.7rem;padding:2px 6px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:4px;color:var(--text-primary)">
                                     <option value="pending" ${status === 'pending' ? 'selected' : ''}>Ch\u01b0a l\u00e0m</option>
-                                    <option value="done" ${status === 'done' ? 'selected' : ''}>\u0110\u00e3 quay</option>
+                                    <option value="done" ${status === 'done' ? 'selected' : ''}>\u0110\u00e3 l\u00e0m</option>
                                     <option value="published" ${status === 'published' ? 'selected' : ''}>\u0110\u00e3 \u0111\u0103ng</option>
                                 </select>
-                                <button class="btn-ghost btn-sm" onclick="createPlanFromRoadmap('${video.title}', '${video.description?.replace(/'/g, "\\'") || ''}')" style="font-size:0.7rem" title="T\u1ea1o Video Plan">\ud83c\udfac Plan</button>
-                                <div style="display:flex;gap:2px;margin-top:2px"><input type="text" id="scan_${day.day}_${video.slot}" placeholder="URL đã đăng" value="${video.publishedUrl || ''}" style="font-size:0.65rem;padding:2px 4px;width:90px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:3px;color:var(--text-primary)"><button class="btn-ghost btn-sm" onclick="scanPublishedVideo('${rm.id}',${day.day},${video.slot})" style="font-size:0.65rem">🔍</button></div>
+                                <div style="display:flex;gap:2px;margin-top:2px"><input type="text" id="scan_${day.day}_${video.slot}" placeholder="URL \u0111\u00e3 \u0111\u0103ng" value="${video.publishedUrl || ''}" style="font-size:0.65rem;padding:2px 4px;width:90px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:3px;color:var(--text-primary)"><button class="btn-ghost btn-sm" onclick="scanPublishedVideo('${rm.id}',${day.day},${video.slot})" style="font-size:0.65rem">\ud83d\udd0d</button></div>
                             </div>
                         </div>
                     </div>`;

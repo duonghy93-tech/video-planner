@@ -331,7 +331,7 @@ app.delete('/api/channels/:id', auth.authMiddleware, (req, res) => {
 // Generate new roadmap for a channel
 app.post('/api/roadmaps/generate', auth.authMiddleware, async (req, res) => {
     try {
-        const { channelId, startDate } = req.body;
+        const { channelId, startDate, days } = req.body;
         if (!channelId) return res.status(400).json({ error: 'Thi\u1ebfu channelId' });
 
         // Find channel (must belong to user)
@@ -347,8 +347,8 @@ app.post('/api/roadmaps/generate', auth.authMiddleware, async (req, res) => {
             if (found) preset = found.data;
         }
 
-        console.log(`\ud83d\uddd3\ufe0f Generating roadmap for "${channel.name}"...`);
-        const roadmapData = await gemini.generateRoadmap(channel, preset, startDate);
+        console.log(`\ud83d\uddd3\ufe0f Generating roadmap for "${channel.name}" (${days || 7} days)...`);
+        const roadmapData = await gemini.generateRoadmap(channel, preset, startDate, days || 7);
 
         const roadmap = {
             id: 'rm_' + Date.now().toString(36),
