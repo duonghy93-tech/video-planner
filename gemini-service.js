@@ -636,6 +636,72 @@ function parseJsonResponse(text) {
         throw new Error('Failed to parse AI response as JSON. Raw response: ' + text.substring(0, 500));
     }
 }
+
+// ============ STRATEGY CHAT ============
+async function strategyChat(channel, messages) {
+    const systemPrompt = `You are a senior social media strategist helping plan a content channel.
+
+Channel info:
+- Name: ${channel.name}
+- Niche: ${channel.niche || 'Not specified'}
+- Description: ${channel.description || 'Not specified'}
+- Language: ${channel.language === 'VN' ? 'Vietnamese' : 'English (US)'}
+- Posts per day: ${channel.postsPerDay || 2}
+
+Your job: Interview the user to understand their channel strategy. Ask ONE question at a time. Be conversational, friendly, and specific.
+
+Topics to cover (in order, skip if already answered):
+1. Target audience (age, gender, demographics, pain points)
+2. Tone & voice (funny, professional, coach, chill, aggressive...)
+3. Products/services they sell (Amazon affiliate, dropship, brand, none)
+4. Competitor channels they want to be like
+5. CTA strategy (comment, follow, link in bio, DM...)
+6. Content dos and don'ts (what to avoid, what to emphasize)
+
+RULES:
+- Ask in ${channel.language === 'VN' ? 'Vietnamese' : 'English'}
+- ONE question per response
+- Keep it short (2-3 sentences max)
+- After getting enough info (5+ exchanges), respond with ONLY a JSON block like:
+{"done": true, "brief": {"target_audience": "...", "tone": "...", "products": "...", "competitors": "...", "content_pillars": ["...", "..."], "cta_strategy": "...", "dos_and_donts": "..."}}
+- If not done yet, respond with plain text (your next question)`;
+
+    const chatHistory = messages.map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }]
+    }));
+
+    const chat = flashModel.startChat({
+        history: [
+            { role: 'user', parts: [{ text: systemPrompt }] },
+            {
+                role: 'model', parts: [{
+                    text: channel.language === 'VN'
+                        ? `Chào bạn! Tôi sẽ giúp bạn xây dựng chiến lược cho kênh "${channel.name}". Hãy bắt đầu nhé!`
+                        : `Hi! I'll help you build a strategy for "${channel.name}". Let's get started!`
+                }]
+            },
+            ...chatHistory
+        ]
+    });
+
+    const result = await chat.sendMessage(messages.length === 0
+        ? (channel.language === 'VN' ? 'Bắt đầu phỏng vấn đi' : 'Start the interview')
+        : messages[messages.length - 1].content
+    );
+    const text = result.response.text();
+
+    // Check if AI returned a JSON brief
+    try {
+        const jsonMatch = text.match(/\{[\s\S]*"done"\s*:\s*true[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+    } catch (e) { }
+
+    return { done: false, message: text };
+}
+
 // ============ ROADMAP GENERATION ============
 async function generateRoadmap(channel, preset, startDate) {
     const days = 7;
@@ -668,7 +734,16 @@ Create a ${days}-day content roadmap for this channel:
 - Start date: ${startDate || new Date().toISOString().split('T')[0]}
 - Platforms: ${Object.entries(channel.socialLinks || {}).filter(([k, v]) => v).map(([k]) => k).join(', ') || 'TikTok, YouTube'}
 ${presetRules}
-
+${channel.brief ? `
+CHANNEL BRIEF (from strategy interview — MUST follow closely):
+- Target Audience: ${channel.brief.target_audience || 'N/A'}
+- Tone & Voice: ${channel.brief.tone || 'N/A'}
+- Products/Services: ${channel.brief.products || 'N/A'}
+- Competitors: ${channel.brief.competitors || 'N/A'}
+- Content Pillars: ${(channel.brief.content_pillars || []).join(', ') || 'N/A'}
+- CTA Strategy: ${channel.brief.cta_strategy || 'N/A'}
+- Dos and Don'ts: ${channel.brief.dos_and_donts || 'N/A'}
+` : ''}
 REQUIREMENTS:
 1. Each video idea must be UNIQUE and specific (not generic)
 2. Mix content types: educational, entertaining, trending, emotional
@@ -709,7 +784,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "weekly_strategy": "Overall strategy explanation for this week"
 }`;
 
-    const result = await flashModel.generateContent(prompt);
+    const result = await proModel.generateContent(prompt);
     const text = result.response.text();
     return safeJsonParse(text);
 }
@@ -769,7 +844,7 @@ Return ONLY valid JSON with the same structure as before:
   "weekly_strategy": "..."
 }`;
 
-    const result = await flashModel.generateContent(prompt);
+    const result = await proModel.generateContent(prompt);
     const text = result.response.text();
     return safeJsonParse(text);
 }
@@ -783,5 +858,6 @@ module.exports = {
     upscaleImage,
     reviewVideo,
     generateRoadmap,
-    generateNextRoadmap
+    generateNextRoadmap,
+    strategyChat
 };

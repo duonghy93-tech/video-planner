@@ -521,6 +521,33 @@ VD:
             </div>
         </div>
     </div>
+    <!-- Strategy Chat Modal -->
+    <div class="modal-overlay" id="strategyChatModal">
+        <div class="modal modal-lg" style="max-width:600px;height:80vh;display:flex;flex-direction:column">
+            <div class="modal-header">
+                <h3>💬 Strategy Chat</h3>
+                <button class="btn-ghost" onclick="closeStrategyChat()">✕</button>
+            </div>
+            <div id="strategyChatBody"
+                style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+                <!-- Messages will be rendered here -->
+            </div>
+            <div id="strategyChatInput"
+                style="padding:12px;border-top:1px solid var(--border-light);display:flex;gap:8px">
+                <input type="text" id="strategyUserInput" placeholder="Trả lời AI..."
+                    style="flex:1;background:var(--bg-input);border:1px solid var(--border-light);border-radius:8px;padding:10px 14px;color:var(--text-primary);font-size:0.9rem"
+                    onkeydown="if(event.key==='Enter')sendStrategyMessage()">
+                <button class="btn-primary" onclick="sendStrategyMessage()"
+                    style="border-radius:8px;padding:10px 16px">📤</button>
+            </div>
+            <div id="strategyChatDone"
+                style="padding:12px;border-top:1px solid var(--border-light);display:none;text-align:center">
+                <p style="color:#10b981;margin-bottom:8px">✅ Brief đã hoàn thành!</p>
+                <button class="btn-primary" onclick="generateRoadmapAfterBrief()" style="width:100%">🗓️ Tạo Roadmap
+                    Ngay</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast -->
     <div class="toast" id="toast"></div>

@@ -174,6 +174,30 @@ app.get('/api/admin/roadmaps', auth.authMiddleware, (req, res) => {
     })));
 });
 
+// ============ STRATEGY CHAT ============
+app.post('/api/channels/:id/strategy', auth.authMiddleware, async (req, res) => {
+    try {
+        const { messages } = req.body;
+        const channels = readJsonFile(path.join(dataDir, 'channels.json'));
+        const channel = channels.find(c => c.id === req.params.id && c.userId === req.user.id);
+        if (!channel) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
+
+        const result = await gemini.strategyChat(channel, messages || []);
+
+        // If AI returned a brief, save it to channel
+        if (result.done && result.brief) {
+            channel.brief = result.brief;
+            writeJsonFile(path.join(dataDir, 'channels.json'), channels);
+            console.log(`\u2705 Channel brief saved for "${channel.name}"`);
+        }
+
+        res.json(result);
+    } catch (err) {
+        console.error('[strategy-chat] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ============ CHANNEL ROUTES ============
 const CHANNELS_FILE = path.join(dataDir, 'channels.json');
 const ROADMAPS_FILE = path.join(dataDir, 'roadmaps.json');

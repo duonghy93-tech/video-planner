@@ -1781,8 +1781,107 @@ async function generateRoadmap(channelId) {
         }
     } catch (e) { }
 
-    // No roadmaps — generate new
+    // No roadmaps — check if channel has a brief
+    if (!channel.brief) {
+        // Open strategy chat first
+        openStrategyChat(channelId);
+        return;
+    }
+
+    // Has brief — generate roadmap
     await generateNewRoadmap(channelId);
+}
+
+// ============ STRATEGY CHAT ============
+let strategyChatMessages = [];
+let strategyChatChannelId = null;
+
+function openStrategyChat(channelId) {
+    strategyChatChannelId = channelId;
+    strategyChatMessages = [];
+    const channel = myChannels.find(c => c.id === channelId);
+
+    document.getElementById('strategyChatBody').innerHTML = '';
+    document.getElementById('strategyChatInput').style.display = 'flex';
+    document.getElementById('strategyChatDone').style.display = 'none';
+    document.getElementById('strategyChatModal').classList.add('active');
+
+    // Send first message to get AI's first question
+    sendStrategyMessage(true);
+}
+
+async function sendStrategyMessage(isInit = false) {
+    const input = document.getElementById('strategyUserInput');
+    const userText = isInit ? '' : input?.value?.trim();
+    if (!isInit && !userText) return;
+
+    if (!isInit) {
+        strategyChatMessages.push({ role: 'user', content: userText });
+        renderChatMessages();
+        input.value = '';
+    }
+
+    // Show typing indicator
+    const body = document.getElementById('strategyChatBody');
+    const typing = document.createElement('div');
+    typing.id = 'typingIndicator';
+    typing.style.cssText = 'padding:10px 14px;background:rgba(139,92,246,0.1);border-radius:12px;border:1px solid rgba(139,92,246,0.2);color:var(--text-secondary);font-size:0.85rem;align-self:flex-start;max-width:80%';
+    typing.textContent = '\u2728 AI \u0111ang suy ngh\u0129...';
+    body.appendChild(typing);
+    body.scrollTop = body.scrollHeight;
+
+    try {
+        const res = await fetch('/api/channels/' + strategyChatChannelId + '/strategy', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ messages: strategyChatMessages })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        document.getElementById('typingIndicator')?.remove();
+
+        if (data.done && data.brief) {
+            // AI finished — show brief summary
+            strategyChatMessages.push({ role: 'ai', content: '\u2705 T\u00f4i \u0111\u00e3 hi\u1ec3u r\u00f5 chi\u1ebfn l\u01b0\u1ee3c k\u00eanh c\u1ee7a b\u1ea1n! Brief \u0111\u00e3 \u0111\u01b0\u1ee3c l\u01b0u.' });
+            renderChatMessages();
+            document.getElementById('strategyChatInput').style.display = 'none';
+            document.getElementById('strategyChatDone').style.display = 'block';
+
+            // Reload channels to get updated brief
+            await loadMyChannels();
+        } else {
+            strategyChatMessages.push({ role: 'ai', content: data.message });
+            renderChatMessages();
+        }
+    } catch (err) {
+        document.getElementById('typingIndicator')?.remove();
+        showToast('\u274c ' + err.message);
+    }
+}
+
+function renderChatMessages() {
+    const body = document.getElementById('strategyChatBody');
+    body.innerHTML = strategyChatMessages.map(m => {
+        if (m.role === 'user') {
+            return `<div style="padding:10px 14px;background:rgba(6,182,212,0.15);border-radius:12px;border:1px solid rgba(6,182,212,0.3);color:var(--text-primary);font-size:0.9rem;align-self:flex-end;max-width:80%">${m.content}</div>`;
+        } else {
+            return `<div style="padding:10px 14px;background:rgba(139,92,246,0.1);border-radius:12px;border:1px solid rgba(139,92,246,0.2);color:var(--text-primary);font-size:0.9rem;align-self:flex-start;max-width:80%">\ud83e\udde0 ${m.content}</div>`;
+        }
+    }).join('');
+    body.scrollTop = body.scrollHeight;
+}
+
+function closeStrategyChat() {
+    document.getElementById('strategyChatModal').classList.remove('active');
+    strategyChatMessages = [];
+}
+
+async function generateRoadmapAfterBrief() {
+    closeStrategyChat();
+    if (strategyChatChannelId) {
+        await generateNewRoadmap(strategyChatChannelId);
+    }
 }
 
 async function generateNewRoadmap(channelId, startDate) {
