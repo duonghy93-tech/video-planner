@@ -12,6 +12,26 @@ const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 const flashModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 const proModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
+// ============ RETRY HELPER ============
+async function retryGenerate(model, content, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const result = await model.generateContent(content);
+            return result;
+        } catch (err) {
+            const status = err?.status || err?.httpStatusCode || 0;
+            const isRetryable = status === 429 || status === 503 || err.message?.includes('overloaded') || err.message?.includes('RESOURCE_EXHAUSTED');
+            if (isRetryable && attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+                console.log(`⚠️ Gemini API error (${status || err.message}), retry ${attempt}/${maxRetries} in ${delay / 1000}s...`);
+                await new Promise(r => setTimeout(r, delay));
+            } else {
+                throw err;
+            }
+        }
+    }
+}
+
 // Safe JSON parser — handles markdown fences and extra text
 function safeJsonParse(text) {
     // Remove markdown code fences
@@ -272,7 +292,7 @@ ${langFormat === 'US' ? '- ALL text content MUST be in English' : '- Text conten
 
     const videoPart = await uploadVideoForAnalysis(videoBuffer, mimeType);
 
-    const result = await proModel.generateContent([dnaPrompt, videoPart]);
+    const result = await retryGenerate(proModel, [dnaPrompt, videoPart]);
     const text = result.response.text();
     return parseJsonResponse(text);
 }
@@ -302,7 +322,7 @@ ${buildLanguageRules(langFormat || 'VN')}`;
 
     const videoPart = await uploadVideoForAnalysis(videoBuffer, mimeType);
 
-    const result = await proModel.generateContent([clipAnalysisPrompt, videoPart]);
+    const result = await retryGenerate(proModel, [clipAnalysisPrompt, videoPart]);
     const text = result.response.text();
     return parseJsonResponse(text);
 }
@@ -390,7 +410,7 @@ IMPORTANT:
 - Return ONLY the JSON, no markdown formatting, no code blocks.
 ${buildLanguageRules(langFormat || 'VN')}`;
 
-    const result = await proModel.generateContent(prompt);
+    const result = await retryGenerate(proModel, prompt);
     const text = result.response.text();
     return parseJsonResponse(text);
 }
@@ -625,7 +645,7 @@ IMPORTANT:
 
     const videoPart = await uploadVideoForAnalysis(videoBuffer, mimeType);
 
-    const result = await proModel.generateContent([reviewPrompt, videoPart]);
+    const result = await retryGenerate(proModel, [reviewPrompt, videoPart]);
     const text = result.response.text();
     return parseJsonResponse(text);
 }
@@ -797,7 +817,7 @@ Return ONLY valid JSON:
   "weekly_strategy": "Overall strategy explanation"
 }`;
 
-    const result = await proModel.generateContent(prompt);
+    const result = await retryGenerate(proModel, prompt);
     const text = result.response.text();
     return safeJsonParse(text);
 }
@@ -857,7 +877,7 @@ Return ONLY valid JSON with the same structure as before:
   "weekly_strategy": "..."
 }`;
 
-    const result = await proModel.generateContent(prompt);
+    const result = await retryGenerate(proModel, prompt);
     const text = result.response.text();
     return safeJsonParse(text);
 }
