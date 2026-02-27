@@ -7,6 +7,22 @@ let reviewVideoFile = null;
 let savedPresets = [];
 let savedCharacters = [];
 
+// ============ API KEY (localStorage per-user) ============
+function getStoredApiKey() {
+    return localStorage.getItem('gemini_api_key') || '';
+}
+
+function setStoredApiKey(key) {
+    localStorage.setItem('gemini_api_key', key);
+}
+
+function getApiHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'x-api-key': getStoredApiKey()
+    };
+}
+
 // ============ CROSS-BROWSER IMAGE DOWNLOAD ============
 function downloadImage(imgSrc, fileName) {
     window.location.href = '/api/download-image?path=' + encodeURIComponent(imgSrc) + '&name=' + encodeURIComponent(fileName || 'image');
@@ -20,6 +36,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUploadZones();
     loadPresets();
     loadCharacters();
+
+    // Auto-fill API key input from localStorage
+    const savedKey = getStoredApiKey();
+    if (savedKey) {
+        const input = document.getElementById('apiKeyInput');
+        if (input) input.value = savedKey;
+    }
 });
 
 // ============ API STATUS ============
@@ -27,19 +50,13 @@ async function checkApiStatus() {
     const statusEl = document.getElementById('apiStatus');
     const dot = statusEl.querySelector('.status-dot');
     const text = statusEl.querySelector('.status-text');
-    try {
-        const res = await fetch('/api/health');
-        const data = await res.json();
-        if (data.apiConfigured) {
-            dot.className = 'status-dot active';
-            text.textContent = 'API sẵn sàng';
-        } else {
-            dot.className = 'status-dot error';
-            text.textContent = 'Chưa cấu hình API Key';
-        }
-    } catch {
+    const hasKey = !!getStoredApiKey();
+    if (hasKey) {
+        dot.className = 'status-dot active';
+        text.textContent = 'API sẵn sàng';
+    } else {
         dot.className = 'status-dot error';
-        text.textContent = 'Server offline';
+        text.textContent = 'Chưa nhập API Key';
     }
 }
 
@@ -204,7 +221,7 @@ async function handleTextGenerate() {
 
         const res = await fetch('/api/analyze-text', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({ description, duration: parseInt(duration), langFormat, presetId: presetId || undefined })
         });
 
@@ -236,6 +253,7 @@ async function handleVideoAnalyze() {
 
         const res = await fetch('/api/analyze-video', {
             method: 'POST',
+            headers: { 'x-api-key': getStoredApiKey() },
             body: formData
         });
 
@@ -268,7 +286,7 @@ async function handleUrlAnalyze() {
 
         const res = await fetch('/api/analyze-url', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({ url, langFormat })
         });
 
@@ -298,6 +316,7 @@ async function handleVideoReview() {
 
         const res = await fetch('/api/review-video', {
             method: 'POST',
+            headers: { 'x-api-key': getStoredApiKey() },
             body: formData
         });
 
@@ -714,7 +733,7 @@ async function handleGenerateCharacterImage(charId, charIndex, prompt) {
     try {
         const res = await fetch('/api/generate-image', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
                 prompt: prompt,
                 clipId: `character_${charId}`,
@@ -771,7 +790,7 @@ async function handleGenerateSingleImage(clipId, index) {
         const prompt = clip.reference_image_prompt || clip.ref_image_start || '';
         const res = await fetch('/api/generate-image', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
                 prompt: prompt,
                 clipId: clipId,
@@ -841,7 +860,7 @@ async function handleGenerateRefImage(clipId, index, refType) {
     try {
         const res = await fetch('/api/generate-image', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
                 prompt: prompt,
                 clipId: `${clipId}_${refType}`,
@@ -897,7 +916,7 @@ async function handleUpscaleImage(clipId, index, currentSrc) {
     try {
         const res = await fetch('/api/upscale-image', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
                 imagePath: currentSrc,
                 clipId: clipId,
@@ -946,7 +965,7 @@ async function handleGenerateAllImages() {
     try {
         const res = await fetch('/api/generate-all', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
                 clips: currentPlan.clips,
                 engine: engine,
@@ -1063,22 +1082,11 @@ async function saveApiKey() {
         return;
     }
 
-    try {
-        const res = await fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ apiKey: key })
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        showToast('✅ ' + data.message);
-        toggleApiKeyModal();
-        checkApiStatus();
-    } catch (err) {
-        showToast('❌ Lỗi: ' + err.message);
-    }
+    // Save to localStorage (per-user, per-browser)
+    setStoredApiKey(key);
+    showToast('✅ API Key đã được lưu trong trình duyệt của bạn!');
+    toggleApiKeyModal();
+    checkApiStatus();
 }
 
 // ============ DNA ANALYSIS HANDLERS ============
@@ -1095,6 +1103,7 @@ async function handleDNAAnalyze() {
 
         const res = await fetch('/api/analyze-dna', {
             method: 'POST',
+            headers: { 'x-api-key': getStoredApiKey() },
             body: formData
         });
 
@@ -1125,7 +1134,7 @@ async function handleDNAUrlAnalyze() {
 
         const res = await fetch('/api/analyze-dna-url', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({ url, langFormat })
         });
 
@@ -1400,7 +1409,7 @@ async function savePresetFromDNA() {
     try {
         const res = await fetch('/api/presets', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({ name: finalName, data: currentDNA })
         });
 
@@ -1483,7 +1492,7 @@ async function saveCharactersFromDNA() {
         const source = currentDNA.video_dna?.title || 'DNA Analysis';
         const res = await fetch('/api/characters', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({ characters: currentDNA.characters, source })
         });
 

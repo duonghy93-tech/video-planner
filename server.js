@@ -20,6 +20,18 @@ app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 app.use(express.static('public'));
 app.use('/output', express.static('output'));
 
+// Per-user API key middleware: read from x-api-key header
+app.use((req, res, next) => {
+    const headerKey = req.headers['x-api-key'];
+    if (headerKey && headerKey.length >= 10) {
+        process.env.GEMINI_API_KEY = headerKey;
+        // Re-initialize gemini service with this user's key
+        delete require.cache[require.resolve('./gemini-service')];
+        gemini = require('./gemini-service');
+    }
+    next();
+});
+
 // Multer config — 500MB limit
 const storage = multer.memoryStorage();
 const upload = multer({
