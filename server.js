@@ -195,8 +195,11 @@ app.get('/api/auth/me', auth.authMiddleware, (req, res) => {
 app.get('/api/admin/overview', auth.authMiddleware, (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
     const users = auth.getUsers();
-    const channels = readJsonFile(path.join(dataDir, 'channels.json'));
-    const roadmaps = readJsonFile(path.join(dataDir, 'roadmaps.json'));
+    const chPath = path.join(dataDir, 'channels.json');
+    const rmPath = path.join(dataDir, 'roadmaps.json');
+    const channels = readJsonFile(chPath);
+    const roadmaps = readJsonFile(rmPath);
+    console.log(`[admin-overview] channels.json exists=${fs.existsSync(chPath)}, count=${channels.length}, roadmaps count=${roadmaps.length}`);
     res.json({
         users: users.length,
         channels: channels.length,
