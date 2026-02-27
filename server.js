@@ -509,6 +509,113 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
     }
 });
 
+// ============ AUTO-SCAN SCHEDULER ============
+async function scanSingleUrl(url) {
+    const ytdlpPath = path.join(__dirname, 'yt-dlp.exe');
+    if (!fs.existsSync(ytdlpPath)) return null;
+
+    return new Promise((resolve) => {
+        execFile(ytdlpPath, ['--dump-json', '--no-download', url], { timeout: 30000 }, (err, stdout) => {
+            if (err) { resolve(null); return; }
+            try {
+                const m = JSON.parse(stdout);
+                resolve({
+                    views: m.view_count || 0,
+                    likes: m.like_count || 0,
+                    comments: m.comment_count || 0,
+                    duration: m.duration || 0,
+                    title: m.title || '',
+                    scannedAt: new Date().toISOString()
+                });
+            } catch (e) { resolve(null); }
+        });
+    });
+}
+
+async function autoScanAllPublished() {
+    console.log('\n\ud83d\udd04 [Auto-Scan] B\u1eaft \u0111\u1ea7u qu\u00e9t t\u1ea5t c\u1ea3 video \u0111\u00e3 \u0111\u0103ng...');
+    const roadmaps = readJsonFile(ROADMAPS_FILE);
+    let scanned = 0, failed = 0;
+
+    for (const rm of roadmaps) {
+        if (!rm.days) continue;
+        for (const day of rm.days) {
+            if (!day.videos) continue;
+            for (const video of day.videos) {
+                if (!video.publishedUrl || video.status !== 'published') continue;
+
+                const metrics = await scanSingleUrl(video.publishedUrl);
+                if (metrics) {
+                    // Save history
+                    if (!video.metricsHistory) video.metricsHistory = [];
+                    if (video.metrics) video.metricsHistory.push(video.metrics);
+                    // Keep max 30 history entries
+                    if (video.metricsHistory.length > 30) video.metricsHistory = video.metricsHistory.slice(-30);
+                    video.metrics = metrics;
+                    scanned++;
+                } else {
+                    failed++;
+                }
+
+                // Rate limit: wait 2s between scans
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+    }
+
+    writeJsonFile(ROADMAPS_FILE, roadmaps);
+    console.log(`\u2705 [Auto-Scan] Ho\u00e0n th\u00e0nh: ${scanned} th\u00e0nh c\u00f4ng, ${failed} l\u1ed7i`);
+    return { scanned, failed };
+}
+
+// Schedule auto-scan every 12 hours
+const SCAN_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours
+setInterval(() => autoScanAllPublished(), SCAN_INTERVAL);
+console.log('\u23f0 Auto-scan: m\u1ed7i 12 gi\u1edd s\u1ebd qu\u00e9t t\u1ea5t c\u1ea3 video \u0111\u00e3 \u0111\u0103ng');
+
+// Admin: manual trigger auto-scan
+app.post('/api/admin/auto-scan', auth.authMiddleware, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    try {
+        const result = await autoScanAllPublished();
+        res.json({ success: true, ...result });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Weekly summary endpoint
+app.get('/api/roadmaps/:id/summary', auth.authMiddleware, (req, res) => {
+    try {
+        const roadmaps = readJsonFile(ROADMAPS_FILE);
+        const rm = roadmaps.find(r => r.id === req.params.id);
+        if (!rm) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y roadmap' });
+
+        let totalViews = 0, totalLikes = 0, totalComments = 0;
+        let publishedCount = 0, bestVideo = null;
+
+        rm.days?.forEach(d => {
+            d.videos?.forEach(v => {
+                if (v.metrics) {
+                    totalViews += v.metrics.views || 0;
+                    totalLikes += v.metrics.likes || 0;
+                    totalComments += v.metrics.comments || 0;
+                    publishedCount++;
+                    if (!bestVideo || (v.metrics.views || 0) > (bestVideo.views || 0)) {
+                        bestVideo = { title: v.title, views: v.metrics.views, likes: v.metrics.likes };
+                    }
+                }
+            });
+        });
+
+        res.json({
+            roadmapName: rm.roadmap_name,
+            weekStart: rm.week_start,
+            totalViews, totalLikes, totalComments, publishedCount,
+            avgViews: publishedCount ? Math.round(totalViews / publishedCount) : 0,
+            bestVideo
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Configure API key at runtime (per-session, not saved to disk)
 app.post('/api/config', (req, res) => {
     try {

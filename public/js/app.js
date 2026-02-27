@@ -2334,3 +2334,39 @@ async function viewChannelDetail(id, isAdmin) {
         document.getElementById('channelDetailModal').classList.add('active');
     } catch (err) { showToast('\u274c ' + err.message); }
 }
+
+// ============ AUTO-SCAN & WEEKLY SUMMARY ============
+async function triggerAutoScan() {
+    showToast('\ud83d\udd04 \u0110ang qu\u00e9t t\u1ea5t c\u1ea3 video...');
+    try {
+        const res = await fetch('/api/admin/auto-scan', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        showToast(`\u2705 Qu\u00e9t xong: ${data.scanned} th\u00e0nh c\u00f4ng, ${data.failed} l\u1ed7i`);
+        loadAdminDashboard();
+    } catch (err) { showToast('\u274c ' + err.message); }
+}
+
+async function loadWeeklySummary(roadmapId) {
+    try {
+        const res = await fetch('/api/roadmaps/' + roadmapId + '/summary', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) return '';
+        const s = await res.json();
+        if (!s.publishedCount) return '';
+        return `<div class="dna-card" style="margin-bottom:16px;background:rgba(16,185,129,0.05)">
+            <h4 style="margin:0 0 8px">\ud83d\udcca T\u1ed5ng K\u1ebft Tu\u1ea7n</h4>
+            <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.9rem">
+                <span>\ud83d\udc41 ${(s.totalViews || 0).toLocaleString()} views</span>
+                <span>\u2764\ufe0f ${(s.totalLikes || 0).toLocaleString()} likes</span>
+                <span>\ud83d\udcac ${(s.totalComments || 0).toLocaleString()} comments</span>
+                <span>\ud83d\udcca Avg: ${(s.avgViews || 0).toLocaleString()} views/video</span>
+            </div>
+            ${s.bestVideo ? `<div style="margin-top:6px;font-size:0.85rem;color:#10b981">\ud83c\udfc6 Best: "${s.bestVideo.title}" (${(s.bestVideo.views || 0).toLocaleString()} views)</div>` : ''}
+        </div>`;
+    } catch (e) { return ''; }
+}
