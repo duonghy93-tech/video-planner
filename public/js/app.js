@@ -876,14 +876,14 @@ async function handleGenerateRefImage(clipId, index, refType) {
     if (!container) return;
     const engine = document.getElementById('engineSelect')?.value ||
         document.getElementById('engineSelectVideo')?.value || 'imagen';
-    const aspectRatio = '9:16'; // Always 9:16 for opening frames
+    const aspectRatio = document.getElementById('aspectRatio')?.value ||
+        document.getElementById('aspectRatioVideo')?.value || '9:16';
 
     container.innerHTML = `
-    container.innerHTML = `
-        < div style = "aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--border-light)" >
+        <div style="aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--border-light)">
             <div class="mini-spinner"></div>
-            <span style="font-size:0.75rem;color:var(--text-muted)">Đang tạo ảnh 9:16...</span>
-        </div > `;
+            <span style="font-size:0.75rem;color:var(--text-muted)">Đang tạo ảnh ${aspectRatio}...</span>
+        </div>`;
 
     try {
         const res = await fetch('/api/generate-image', {
@@ -891,7 +891,7 @@ async function handleGenerateRefImage(clipId, index, refType) {
             headers: getApiHeaders(),
             body: JSON.stringify({
                 prompt: prompt,
-                clipId: `${ clipId } _opening`,
+                clipId: `${clipId} _opening`,
                 engine: engine,
                 aspectRatio: aspectRatio,
                 projectDir: currentPlan._outputDir
@@ -909,7 +909,7 @@ async function handleGenerateRefImage(clipId, index, refType) {
                 <button class="btn-img-action-sm" onclick="handleUpscaleImage('${clipId}', ${index}, '${imgSrc}')" title="Upscale">🔍 Upscale</button>
                 <button class="btn-img-action-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, 'start')" title="Tạo lại">🔄 Lại</button>
             </div>`;
-        showToast(`✅ Ảnh opening frame cho ${ clipId } `);
+        showToast(`✅ Ảnh opening frame cho ${clipId} `);
     } catch (err) {
         container.innerHTML = `
         < div style = "aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--accent-red)" >
@@ -925,16 +925,16 @@ async function handleGenerateRefImage(clipId, index, refType) {
 // Generate all 3 ref images for a clip
 async function handleGenerateAllRefImages(clipId, index) {
     const types = ['start', 'key', 'end'];
-    showToast(`⏳ Đang tạo 3 ảnh ref cho ${ clipId }...`);
+    showToast(`⏳ Đang tạo 3 ảnh ref cho ${clipId}...`);
     for (const t of types) {
         await handleGenerateRefImage(clipId, index, t);
     }
-    showToast(`✅ Đã tạo 3 ảnh ref cho ${ clipId } !`);
+    showToast(`✅ Đã tạo 3 ảnh ref cho ${clipId} !`);
 }
 
 // ============ UPSCALE IMAGE ============
 async function handleUpscaleImage(clipId, index, currentSrc) {
-    const container = document.getElementById(`img - ${ clipId } `);
+    const container = document.getElementById(`img - ${clipId} `);
     const actionsDiv = container.querySelector('.img-action-buttons');
     if (actionsDiv) {
         actionsDiv.innerHTML = '<span style="font-size:0.75rem;color:var(--accent-cyan)">⏳ Đang upscale...</span>';
@@ -969,7 +969,7 @@ async function handleUpscaleImage(clipId, index, currentSrc) {
                 </button >
         <span style="font-size:0.75rem;color:var(--accent-green)">✅ Upscaled!</span>`;
         }
-        showToast(`✅ Đã upscale ảnh ${ clipId } !`);
+        showToast(`✅ Đã upscale ảnh ${clipId} !`);
     } catch (err) {
         if (actionsDiv) {
             actionsDiv.innerHTML = `
@@ -987,7 +987,7 @@ async function handleGenerateAllImages() {
     const engine = document.getElementById('engineSelect')?.value ||
         document.getElementById('engineSelectVideo')?.value || 'gemini';
 
-    showLoading('Đang tạo tất cả ảnh reference...', `${ currentPlan.clips.length } ảnh · Engine: ${ engine } `);
+    showLoading('Đang tạo tất cả ảnh reference...', `${currentPlan.clips.length} ảnh · Engine: ${engine} `);
 
     try {
         const res = await fetch('/api/generate-all', {
@@ -1005,7 +1005,7 @@ async function handleGenerateAllImages() {
 
         // Update images in cards
         data.results.forEach(result => {
-            const container = document.getElementById(`img - ${ result.clip_id } `);
+            const container = document.getElementById(`img - ${result.clip_id} `);
             if (container && result.success) {
                 container.innerHTML = `< img src = "${result.imagePath}" alt = "${result.clip_id}" loading = "lazy" > `;
             } else if (container) {
@@ -1017,12 +1017,12 @@ async function handleGenerateAllImages() {
         });
 
         const successCount = data.results.filter(r => r.success).length;
-        showToast(`✅ Đã tạo ${ successCount }/${data.results.length} ảnh`);
-} catch (err) {
-    showToast('❌ Lỗi: ' + err.message);
-} finally {
-    hideLoading();
-}
+        showToast(`✅ Đã tạo ${successCount}/${data.results.length} ảnh`);
+    } catch (err) {
+        showToast('❌ Lỗi: ' + err.message);
+    } finally {
+        hideLoading();
+    }
 }
 
 // ============ COPY / DOWNLOAD ============
