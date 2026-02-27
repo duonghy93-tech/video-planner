@@ -9,6 +9,7 @@ const http = require('http');
 const { execFile } = require('child_process');
 const sharp = require('sharp');
 let gemini = require('./gemini-service');
+const auth = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -88,6 +89,117 @@ app.get('/api/health', (req, res) => {
         apiConfigured: hasKey,
         timestamp: new Date().toISOString()
     });
+});
+
+// ============ AUTH ROUTES ============
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Thiếu username hoặc password' });
+        const result = await auth.loginUser(username, password);
+        res.json(result);
+    } catch (err) {
+        res.status(401).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/register', auth.authMiddleware, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ error: 'Chỉ admin mới tạo tài khoản' });
+        const { username, password, name, role } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Thiếu username hoặc password' });
+        const user = await auth.registerUser(username, password, name, role);
+        res.json({ success: true, user });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+app.get('/api/auth/users', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    res.json(auth.getUsers());
+});
+
+app.delete('/api/auth/users/:id', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    try {
+        auth.deleteUser(req.params.id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+app.get('/api/auth/me', auth.authMiddleware, (req, res) => {
+    res.json({ user: req.user });
+});
+
+// ============ CHANNEL ROUTES ============
+const CHANNELS_FILE = path.join(dataDir, 'channels.json');
+const ROADMAPS_FILE = path.join(dataDir, 'roadmaps.json');
+
+// Get user's channels
+app.get('/api/channels', auth.authMiddleware, (req, res) => {
+    const allChannels = readJsonFile(CHANNELS_FILE);
+    const userChannels = allChannels.filter(c => c.userId === req.user.id);
+    res.json(userChannels);
+});
+
+// Create channel
+app.post('/api/channels', auth.authMiddleware, (req, res) => {
+    try {
+        const { name, niche, description, presetId, socialLinks, postsPerDay, language } = req.body;
+        if (!name) return res.status(400).json({ error: 'T\u00ean k\u00eanh kh\u00f4ng \u0111\u01b0\u1ee3c \u0111\u1ec3 tr\u1ed1ng' });
+
+        const channel = {
+            id: 'ch_' + Date.now().toString(36),
+            userId: req.user.id,
+            name,
+            niche: niche || '',
+            description: description || '',
+            presetId: presetId || null,
+            socialLinks: socialLinks || {},
+            postsPerDay: postsPerDay || 2,
+            language: language || 'US',
+            createdAt: new Date().toISOString()
+        };
+
+        const channels = readJsonFile(CHANNELS_FILE);
+        channels.push(channel);
+        writeJsonFile(CHANNELS_FILE, channels);
+        res.json({ success: true, channel });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update channel
+app.put('/api/channels/:id', auth.authMiddleware, (req, res) => {
+    try {
+        const channels = readJsonFile(CHANNELS_FILE);
+        const idx = channels.findIndex(c => c.id === req.params.id && c.userId === req.user.id);
+        if (idx === -1) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
+
+        const updates = req.body;
+        channels[idx] = { ...channels[idx], ...updates, id: channels[idx].id, userId: channels[idx].userId };
+        writeJsonFile(CHANNELS_FILE, channels);
+        res.json({ success: true, channel: channels[idx] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete channel
+app.delete('/api/channels/:id', auth.authMiddleware, (req, res) => {
+    try {
+        const channels = readJsonFile(CHANNELS_FILE);
+        const filtered = channels.filter(c => !(c.id === req.params.id && c.userId === req.user.id));
+        if (filtered.length === channels.length) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
+        writeJsonFile(CHANNELS_FILE, filtered);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Configure API key at runtime (per-session, not saved to disk)
@@ -681,4 +793,7 @@ app.listen(PORT, () => {
     } else {
         console.log('⚠️  yt-dlp.exe not found — chỉ hỗ trợ link video trực tiếp\n');
     }
+
+    // Create default admin
+    auth.ensureAdmin();
 });

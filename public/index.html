@@ -37,11 +37,15 @@
                 </div>
             </div>
             <div class="header-right">
+                <span id="userDisplay" style="font-size:0.85rem;color:var(--text-secondary);margin-right:12px"></span>
                 <div class="header-status" id="apiStatus" onclick="toggleApiKeyModal()" style="cursor:pointer"
                     title="Click để cấu hình API Key">
                     <span class="status-dot"></span>
                     <span class="status-text">Đang kiểm tra...</span>
                 </div>
+                <button onclick="logout()"
+                    style="margin-left:12px;padding:6px 12px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-size:0.8rem;cursor:pointer;font-family:var(--font-sans)"
+                    title="Đăng xuất">🚪</button>
             </div>
         </div>
     </header>
@@ -72,8 +76,89 @@
                 </svg>
                 Đánh Giá Video
             </button>
+            <button class="tab-btn" data-tab="channels" id="tabChannels">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="20" height="15" rx="2" ry="2" />
+                    <polyline points="17 2 12 7 7 2" />
+                </svg>
+                Kênh Của Tôi
+            </button>
         </nav>
 
+        <!-- Tab: Channels -->
+        <section class="tab-content" id="panelChannels">
+            <div class="input-section">
+                <div class="section-header">
+                    <h2>📺 Quản Lý Kênh</h2>
+                    <p>Tạo kênh theo chủ đề, gắn preset style, và quản lý roadmap nội dung</p>
+                </div>
+
+                <!-- Channel creation form -->
+                <div class="dna-card" style="border:1px dashed var(--accent-purple);margin-bottom:24px">
+                    <h3>➕ Tạo Kênh Mới</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                        <div class="form-group">
+                            <label>Tên kênh *</label>
+                            <input type="text" id="chName" placeholder="VD: Cooking US, Fix It BRO...">
+                        </div>
+                        <div class="form-group">
+                            <label>Niche / Chủ đề</label>
+                            <input type="text" id="chNiche" placeholder="VD: Food, Home, Tech...">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Mô tả kênh</label>
+                        <textarea id="chDescription" rows="2"
+                            placeholder="Mô tả chi tiết về target audience, nội dung chính..."></textarea>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                        <div class="form-group">
+                            <label>YouTube URL</label>
+                            <input type="text" id="chYoutube" placeholder="https://youtube.com/@...">
+                        </div>
+                        <div class="form-group">
+                            <label>TikTok URL</label>
+                            <input type="text" id="chTiktok" placeholder="https://tiktok.com/@...">
+                        </div>
+                        <div class="form-group">
+                            <label>Facebook URL</label>
+                            <input type="text" id="chFacebook" placeholder="https://facebook.com/...">
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                        <div class="form-group">
+                            <label>Ngôn ngữ</label>
+                            <select id="chLanguage">
+                                <option value="US">🇺🇸 English (US)</option>
+                                <option value="VN">🇻🇳 Tiếng Việt</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Video / ngày</label>
+                            <select id="chPostsPerDay">
+                                <option value="1">1 video</option>
+                                <option value="2" selected>2 videos</option>
+                                <option value="3">3 videos</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Preset Style</label>
+                            <select id="chPreset">
+                                <option value="">— Không chọn —</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn-primary" onclick="createChannel()">📺 Tạo Kênh</button>
+                </div>
+
+                <!-- Channel list -->
+                <div id="channelList">
+                    <p style="color:var(--text-secondary);text-align:center;padding:40px">
+                        Chưa có kênh nào. Tạo kênh mới để bắt đầu!
+                    </p>
+                </div>
+            </div>
+        </section>
         <!-- Tab: Create from Text -->
         <section class="tab-content active" id="panelText">
             <div class="input-section">

@@ -16,11 +16,26 @@ function setStoredApiKey(key) {
     localStorage.setItem('gemini_api_key', key);
 }
 
+function getAuthToken() {
+    return localStorage.getItem('auth_token') || '';
+}
+
+function getCurrentUser() {
+    try { return JSON.parse(localStorage.getItem('auth_user') || 'null'); } catch { return null; }
+}
+
 function getApiHeaders() {
     return {
         'Content-Type': 'application/json',
-        'x-api-key': getStoredApiKey()
+        'x-api-key': getStoredApiKey(),
+        'Authorization': 'Bearer ' + getAuthToken()
     };
+}
+
+function logout() {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    window.location.href = '/login.html';
 }
 
 // ============ CROSS-BROWSER IMAGE DOWNLOAD ============
@@ -30,12 +45,33 @@ function downloadImage(imgSrc, fileName) {
 
 // ============ INIT ============
 document.addEventListener('DOMContentLoaded', () => {
+    // Auth check
+    const token = getAuthToken();
+    if (!token) {
+        window.location.href = '/login.html';
+        return;
+    }
+
+    // Verify token
+    fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(data => {
+            // Show user info
+            const userEl = document.getElementById('userDisplay');
+            if (userEl) userEl.textContent = `👤 ${data.user.username}`;
+        })
+        .catch(() => {
+            localStorage.removeItem('auth_token');
+            window.location.href = '/login.html';
+        });
+
     checkApiStatus();
     setupTabs();
     setupSlider();
     setupUploadZones();
     loadPresets();
     loadCharacters();
+    loadMyChannels();
 
     // Auto-fill API key input from localStorage
     const savedKey = getStoredApiKey();
@@ -1358,6 +1394,7 @@ async function loadPresets() {
         const data = await res.json();
         savedPresets = data.presets || [];
         updatePresetDropdown();
+        loadChannelPresetDropdown();
     } catch (e) {
         console.error('Failed to load presets:', e);
     }
@@ -1591,4 +1628,126 @@ function openCharacterLibrary() {
 
 function closeCharacterLibrary() {
     document.getElementById('characterLibraryModal').classList.remove('active');
+}
+
+// ============ CHANNEL MANAGEMENT ============
+let myChannels = [];
+
+async function loadMyChannels() {
+    try {
+        const res = await fetch('/api/channels', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) return;
+        myChannels = await res.json();
+        renderChannelList();
+    } catch (e) {
+        console.error('Failed to load channels:', e);
+    }
+}
+
+function renderChannelList() {
+    const container = document.getElementById('channelList');
+    if (!container) return;
+
+    if (!myChannels.length) {
+        container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px">Chưa có kênh nào. Tạo kênh mới để bắt đầu!</p>';
+        return;
+    }
+
+    container.innerHTML = myChannels.map(ch => {
+        const platforms = [];
+        if (ch.socialLinks?.youtube) platforms.push('🎬 YouTube');
+        if (ch.socialLinks?.tiktok) platforms.push('🎵 TikTok');
+        if (ch.socialLinks?.facebook) platforms.push('📘 Facebook');
+        const presetName = savedPresets.find(p => p.id === ch.presetId)?.name || '';
+
+        return `
+        <div class="dna-card" style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                    <h3 style="margin:0">📺 ${ch.name}</h3>
+                    <div style="color:var(--text-secondary);font-size:0.85rem;margin-top:4px">
+                        ${ch.niche ? `<span style="margin-right:12px">🏷️ ${ch.niche}</span>` : ''}
+                        <span style="margin-right:12px">${ch.language === 'VN' ? '🇻🇳' : '🇺🇸'} ${ch.language}</span>
+                        <span style="margin-right:12px">📅 ${ch.postsPerDay} video/ngày</span>
+                        ${presetName ? `<span>🎨 ${presetName}</span>` : ''}
+                    </div>
+                    ${ch.description ? `<p style="color:var(--text-secondary);font-size:0.8rem;margin-top:6px">${ch.description}</p>` : ''}
+                    ${platforms.length ? `<div style="margin-top:8px;font-size:0.8rem;color:var(--accent-purple)">${platforms.join(' · ')}</div>` : ''}
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-primary btn-sm" onclick="generateRoadmap('${ch.id}')" title="Tạo Roadmap">🗓️ Roadmap</button>
+                    <button class="btn-ghost btn-danger btn-sm" onclick="deleteChannel('${ch.id}')" title="Xóa kênh">🗑️</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function createChannel() {
+    const name = document.getElementById('chName')?.value.trim();
+    if (!name) { showToast('⚠️ Nhập tên kênh'); return; }
+
+    const channel = {
+        name,
+        niche: document.getElementById('chNiche')?.value.trim() || '',
+        description: document.getElementById('chDescription')?.value.trim() || '',
+        socialLinks: {
+            youtube: document.getElementById('chYoutube')?.value.trim() || '',
+            tiktok: document.getElementById('chTiktok')?.value.trim() || '',
+            facebook: document.getElementById('chFacebook')?.value.trim() || ''
+        },
+        language: document.getElementById('chLanguage')?.value || 'US',
+        postsPerDay: parseInt(document.getElementById('chPostsPerDay')?.value) || 2,
+        presetId: document.getElementById('chPreset')?.value || null
+    };
+
+    try {
+        const res = await fetch('/api/channels', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify(channel)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        showToast('✅ Đã tạo kênh: ' + name);
+        // Clear form
+        ['chName', 'chNiche', 'chDescription', 'chYoutube', 'chTiktok', 'chFacebook'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        await loadMyChannels();
+    } catch (err) {
+        showToast('❌ ' + err.message);
+    }
+}
+
+async function deleteChannel(id) {
+    if (!confirm('Xóa kênh này? Roadmaps cũng sẽ bị mất.')) return;
+    try {
+        await fetch('/api/channels/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        showToast('🗑️ Đã xóa kênh');
+        await loadMyChannels();
+    } catch (err) {
+        showToast('❌ ' + err.message);
+    }
+}
+
+function loadChannelPresetDropdown() {
+    const sel = document.getElementById('chPreset');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Không chọn —</option>';
+    savedPresets.forEach(p => {
+        sel.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    });
+}
+
+// Placeholder for Phase 3
+function generateRoadmap(channelId) {
+    showToast('🚧 Tính năng Roadmap sẽ sớm ra mắt!');
 }
