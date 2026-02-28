@@ -1361,7 +1361,8 @@ app.post('/api/user/scan-channels', auth.authMiddleware, async (req, res) => {
 const CHAT_HISTORY_FILE = path.join(dataDir, 'chat_history.json');
 
 function getUserChats(userId) {
-    const all = readJsonFile(CHAT_HISTORY_FILE) || {};
+    let all = readJsonFile(CHAT_HISTORY_FILE);
+    if (Array.isArray(all) || !all) all = {};
     if (!all[userId]) all[userId] = { convs: [] };
     // Migrate old flat array format to new format
     if (Array.isArray(all[userId])) {
@@ -1530,8 +1531,10 @@ app.get('/api/chat/history', auth.authMiddleware, (req, res) => {
 // Admin: view all users' chat logs
 app.get('/api/admin/chat-logs', auth.authMiddleware, (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
+    let chatHistory = readJsonFile(CHAT_HISTORY_FILE);
+    if (Array.isArray(chatHistory) || !chatHistory) chatHistory = {};
     const users = readJsonFile(USERS_FILE) || [];
+    console.log('[admin-chat-logs] Users in history:', Object.keys(chatHistory).length);
 
     const logs = Object.entries(chatHistory).map(([userId, data]) => {
         const user = users.find(u => u.id === userId);

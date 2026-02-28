@@ -3383,6 +3383,32 @@ function initChatbot() {
     `;
     document.body.appendChild(panel);
     loadChatConversations();
+
+    // Clipboard paste support for images
+    document.addEventListener('paste', (e) => {
+        const panel = document.getElementById('chatbotPanel');
+        if (!panel || panel.style.display !== 'flex') return;
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                if (!file) return;
+                _chatFile = file;
+                const preview = document.getElementById('chatFilePreview');
+                if (preview) {
+                    const size = (file.size / 1024 / 1024).toFixed(1);
+                    preview.style.display = 'flex';
+                    preview.style.justifyContent = 'space-between';
+                    preview.style.alignItems = 'center';
+                    preview.innerHTML = `<span>📋 Ảnh từ clipboard (${size}MB)</span><button onclick="clearChatFile()" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.8rem">✕</button>`;
+                }
+                document.getElementById('chatInput')?.focus();
+                return;
+            }
+        }
+    });
 }
 
 function toggleChatbot() {
