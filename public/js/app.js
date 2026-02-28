@@ -1883,10 +1883,26 @@ function openCharacterLibrary() {
     const modal = document.getElementById('characterLibraryModal');
     const body = document.getElementById('characterLibraryBody');
 
+    // Add character form at top
+    let addFormHtml = `
+        <div class="dna-card" style="margin-bottom:16px;border:1px dashed var(--accent-purple);padding:14px">
+            <h4 style="margin:0 0 8px">➕ Thêm Nhân Vật Mới</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+                <div class="form-group" style="margin:0"><label style="font-size:0.7rem">Tên</label><input id="newCharName" placeholder="Tên nhân vật" style="width:100%;padding:6px 8px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:0.85rem"></div>
+                <div class="form-group" style="margin:0"><label style="font-size:0.7rem">Giới tính</label><input id="newCharGender" placeholder="male/female" style="width:100%;padding:6px 8px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:0.85rem"></div>
+            </div>
+            <div class="form-group" style="margin:0 0 6px"><label style="font-size:0.7rem">Vai trò</label><input id="newCharRole" placeholder="VD: narrator, mascot..." style="width:100%;padding:6px 8px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:0.85rem"></div>
+            <div class="form-group" style="margin:0 0 6px"><label style="font-size:0.7rem">Ngoại hình</label><textarea id="newCharAppearance" rows="2" placeholder="Mô tả ngoại hình..." style="width:100%;padding:6px 8px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:0.8rem"></textarea></div>
+            <div class="form-group" style="margin:0 0 6px"><label style="font-size:0.7rem">Tính cách</label><textarea id="newCharPersonality" rows="2" placeholder="Mô tả tính cách..." style="width:100%;padding:6px 8px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:0.8rem"></textarea></div>
+            <div class="form-group" style="margin:0 0 8px"><label style="font-size:0.7rem">Prompt tạo ảnh (ref_prompt)</label><textarea id="newCharRefPrompt" rows="2" placeholder="3D animated character..." style="width:100%;padding:6px 8px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:6px;color:var(--text-primary);font-size:0.8rem"></textarea></div>
+            <button class="btn-dna-save" onclick="addNewCharacter()" style="width:100%">💾 Thêm Nhân Vật</button>
+        </div>`;
+
     if (!savedCharacters.length) {
-        body.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px 0">Chưa có nhân vật nào.<br>Phân tích DNA video để lưu nhân vật.</p>';
+        body.innerHTML = addFormHtml + '<p style="color:var(--text-secondary);text-align:center;padding:20px 0">Chưa có nhân vật nào.</p>';
     } else {
-        body.innerHTML = `
+        body.innerHTML = addFormHtml + `
+            <h4 style="margin:0 0 8px">🎭 Nhân Vật Đã Lưu (${savedCharacters.length})</h4>
             <div class="character-lib-grid">
                 ${savedCharacters.map(ch => `
                     <div class="char-lib-card">
@@ -1894,20 +1910,71 @@ function openCharacterLibrary() {
                             <span class="char-lib-avatar">${ch.gender === 'female' ? '👩' : '👨'}</span>
                             <div>
                                 <div class="char-lib-name">${ch.name}</div>
-                                <div class="char-lib-meta">${ch.gender || ''} · ${ch.age_range || ''} · ${ch.ethnicity || ''}</div>
+                                <div class="char-lib-meta">${ch.gender || ''} · ${ch.role_in_video || ''}</div>
                             </div>
-                            <button class="btn-ghost btn-danger btn-sm" onclick="deleteCharacter('${ch.id}')">🗑️</button>
+                            <div style="display:flex;gap:4px">
+                                <button class="btn-ghost btn-sm" onclick="editCharacter('${ch.id}')" title="Sửa">✏️</button>
+                                <button class="btn-ghost btn-danger btn-sm" onclick="deleteCharacter('${ch.id}')" title="Xóa">🗑️</button>
+                            </div>
                         </div>
                         ${ch.appearance ? `<div class="char-lib-detail">👤 ${ch.appearance}</div>` : ''}
-                        ${ch.clothing ? `<div class="char-lib-detail">👕 ${ch.clothing}</div>` : ''}
                         ${ch.personality ? `<div class="char-lib-detail">💫 ${ch.personality}</div>` : ''}
-                        <div class="char-lib-source">Nguồn: ${ch.source || 'unknown'}</div>
+                        ${ch.ref_prompt ? `<div class="char-lib-detail">🖼️ ${ch.ref_prompt.substring(0, 80)}...</div>` : ''}
                     </div>
                 `).join('')}
             </div>`;
     }
 
     modal.classList.add('active');
+}
+
+async function addNewCharacter() {
+    const name = document.getElementById('newCharName')?.value.trim();
+    if (!name) { showToast('⚠️ Nhập tên nhân vật'); return; }
+    try {
+        const res = await fetch('/api/characters', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({
+                name,
+                characterId: name.toLowerCase().replace(/\s+/g, '_'),
+                gender: document.getElementById('newCharGender')?.value || '',
+                role_in_video: document.getElementById('newCharRole')?.value || '',
+                appearance: document.getElementById('newCharAppearance')?.value || '',
+                personality: document.getElementById('newCharPersonality')?.value || '',
+                ref_prompt: document.getElementById('newCharRefPrompt')?.value || '',
+                source: 'manual'
+            })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showToast('✅ Đã thêm nhân vật: ' + name);
+        await loadCharacters();
+        openCharacterLibrary();
+    } catch (err) { showToast('❌ ' + err.message); }
+}
+
+async function editCharacter(charId) {
+    const ch = savedCharacters.find(c => c.id === charId);
+    if (!ch) return;
+    const newName = prompt('Tên nhân vật:', ch.name);
+    if (newName === null) return;
+    const newAppearance = prompt('Ngoại hình:', ch.appearance || '');
+    if (newAppearance === null) return;
+    const newPersonality = prompt('Tính cách:', ch.personality || '');
+    if (newPersonality === null) return;
+    const newRefPrompt = prompt('Ref prompt:', ch.ref_prompt || '');
+    if (newRefPrompt === null) return;
+    try {
+        const res = await fetch('/api/characters/' + charId, {
+            method: 'PUT',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ name: newName, appearance: newAppearance, personality: newPersonality, ref_prompt: newRefPrompt })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showToast('✅ Đã cập nhật: ' + newName);
+        await loadCharacters();
+        openCharacterLibrary();
+    } catch (err) { showToast('❌ ' + err.message); }
 }
 
 function closeCharacterLibrary() {

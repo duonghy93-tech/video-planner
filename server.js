@@ -1955,6 +1955,27 @@ app.post('/api/characters', auth.authMiddleware, (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.put('/api/characters/:id', auth.authMiddleware, (req, res) => {
+    try {
+        const chars = readJsonFile(CHARACTERS_FILE) || [];
+        const char = chars.find(c => c.id === req.params.id && (c.userId === req.user.id || req.user.role === 'admin'));
+        if (!char) return res.status(404).json({ error: 'Not found' });
+        const { name, gender, role_in_video, appearance, personality, ref_prompt, backstory, voiceStyle } = req.body;
+        if (name !== undefined) char.name = name;
+        if (gender !== undefined) char.gender = gender;
+        if (role_in_video !== undefined) char.role_in_video = role_in_video;
+        if (appearance !== undefined) char.appearance = appearance;
+        if (personality !== undefined) char.personality = personality;
+        if (ref_prompt !== undefined) char.ref_prompt = ref_prompt;
+        if (backstory !== undefined) char.backstory = backstory;
+        if (voiceStyle !== undefined) char.voiceStyle = voiceStyle;
+        char.updatedAt = new Date().toISOString();
+        writeJsonFile(CHARACTERS_FILE, chars);
+        console.log(`[characters] Updated: ${char.name}`);
+        res.json({ success: true, character: char });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.delete('/api/characters/:id', auth.authMiddleware, (req, res) => {
     try {
         let chars = readJsonFile(CHARACTERS_FILE) || [];
