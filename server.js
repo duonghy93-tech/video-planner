@@ -1412,11 +1412,23 @@ app.get('/api/chat/conversations/:convId', auth.authMiddleware, (req, res) => {
     res.json(conv);
 });
 
-// Send message to a conversation
-app.post('/api/chat', auth.authMiddleware, async (req, res) => {
+// Chat file upload multer
+const chatUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'application/pdf', 'text/plain', 'text/csv'];
+        cb(null, allowed.includes(file.mimetype));
+    }
+});
+
+// Send message to a conversation (with optional file)
+app.post('/api/chat', auth.authMiddleware, chatUpload.single('file'), async (req, res) => {
     try {
-        const { message, convId } = req.body;
-        if (!message) return res.status(400).json({ error: 'Message required' });
+        const message = req.body.message;
+        const convId = req.body.convId;
+        const file = req.file;
+        if (!message && !file) return res.status(400).json({ error: 'Message or file required' });
 
         const all = getUserChats(req.user.id);
         let conv;
@@ -1425,8 +1437,7 @@ app.post('/api/chat', auth.authMiddleware, async (req, res) => {
             conv = all[req.user.id].convs.find(c => c.id === convId);
         }
         if (!conv) {
-            // Auto-create conversation
-            conv = { id: 'conv_' + Date.now().toString(36), title: message.substring(0, 40), messages: [], createdAt: new Date().toISOString() };
+            conv = { id: 'conv_' + Date.now().toString(36), title: (message || 'File upload').substring(0, 40), messages: [], createdAt: new Date().toISOString() };
             all[req.user.id].convs.unshift(conv);
         }
 
@@ -1467,22 +1478,28 @@ Trả lời chi tiết, có cấu trúc rõ ràng (dùng heading, bullet, number
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-2.5-pro',
             systemInstruction: systemPrompt
         });
 
+        // Build message parts (text + optional file)
+        const messageParts = [];
+        if (message) messageParts.push({ text: message });
+        let fileInfo = null;
+        if (file) {
+            messageParts.push({ inlineData: { mimeType: file.mimetype, data: file.buffer.toString('base64') } });
+            fileInfo = { name: file.originalname, type: file.mimetype, size: file.size };
+        }
+
         const chat = model.startChat({ history: historyMessages });
-        const result = await chat.sendMessage(message);
+        const result = await chat.sendMessage(messageParts);
         const reply = result.response.text();
 
         // Save messages
-        conv.messages.push({ role: 'user', content: message, time: new Date().toISOString() });
+        const userMsg = message || `📎 ${file.originalname}`;
+        conv.messages.push({ role: 'user', content: userMsg, time: new Date().toISOString(), ...(fileInfo ? { file: fileInfo } : {}) });
         conv.messages.push({ role: 'ai', content: reply, time: new Date().toISOString() });
-
-        // Auto-title from first message
-        if (conv.messages.length === 2) {
-            conv.title = message.substring(0, 50);
-        }
+        if (conv.messages.length === 2) conv.title = (message || file?.originalname || 'Chat').substring(0, 50);
 
         // Keep max 200 messages per conversation
         if (conv.messages.length > 200) conv.messages = conv.messages.slice(-200);

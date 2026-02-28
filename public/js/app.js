@@ -3352,7 +3352,10 @@ function initChatbot() {
                         </div>
                     </div>
                 </div>
-                <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px">
+                <div id="chatFilePreview" style="display:none;padding:4px 12px;border-top:1px solid var(--border);font-size:0.72rem;color:var(--text-secondary);background:rgba(139,92,246,0.08)"></div>
+                <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:6px;align-items:center">
+                    <input type="file" id="chatFileInput" style="display:none" accept="image/*,video/*,audio/*,.pdf,.txt,.csv" onchange="onChatFileSelected(this)">
+                    <button onclick="document.getElementById('chatFileInput').click()" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.9rem" title="Đính kèm file">📎</button>
                     <input type="text" id="chatInput" placeholder="Hỏi gì đó..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-primary);font-size:0.85rem;font-family:var(--font-sans)" onkeypress="if(event.key==='Enter')sendChat()">
                     <button onclick="sendChat()" style="padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">Gửi</button>
                 </div>
@@ -3467,17 +3470,43 @@ function quickChat(msg) {
     sendChat();
 }
 
+let _chatFile = null;
+function onChatFileSelected(input) {
+    const file = input.files[0];
+    if (!file) { _chatFile = null; return; }
+    _chatFile = file;
+    const preview = document.getElementById('chatFilePreview');
+    if (preview) {
+        const icon = file.type.startsWith('image/') ? '🖼️' : file.type.startsWith('video/') ? '🎬' : file.type.startsWith('audio/') ? '🔊' : '📄';
+        const size = (file.size / 1024 / 1024).toFixed(1);
+        preview.style.display = 'flex';
+        preview.style.justifyContent = 'space-between';
+        preview.style.alignItems = 'center';
+        preview.innerHTML = `<span>${icon} ${file.name} (${size}MB)</span><button onclick="clearChatFile()" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.8rem">✕</button>`;
+    }
+}
+
+function clearChatFile() {
+    _chatFile = null;
+    document.getElementById('chatFileInput').value = '';
+    const preview = document.getElementById('chatFilePreview');
+    if (preview) { preview.style.display = 'none'; preview.innerHTML = ''; }
+}
+
 async function sendChat() {
     const input = document.getElementById('chatInput');
     const msg = input?.value?.trim();
-    if (!msg) return;
+    const file = _chatFile;
+    if (!msg && !file) return;
     input.value = '';
 
-    // Clear welcome screen on first message
     const container = document.getElementById('chatMessages');
     if (container && !_currentConvId) container.innerHTML = '';
 
-    appendChatMessage('user', msg);
+    // Show user message with file indicator
+    const userDisplay = file ? (msg ? `${msg}\n📎 ${file.name}` : `📎 ${file.name}`) : msg;
+    appendChatMessage('user', userDisplay);
+    clearChatFile();
 
     const typing = document.createElement('div');
     typing.id = 'chatTyping';
@@ -3487,9 +3516,15 @@ async function sendChat() {
     scrollChatToBottom();
 
     try {
+        const formData = new FormData();
+        if (msg) formData.append('message', msg);
+        if (_currentConvId) formData.append('convId', _currentConvId);
+        if (file) formData.append('file', file);
+
         const res = await fetch('/api/chat', {
-            method: 'POST', headers: getApiHeaders(),
-            body: JSON.stringify({ message: msg, convId: _currentConvId || undefined })
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+            body: formData
         });
         const data = await res.json();
         typing.remove();
