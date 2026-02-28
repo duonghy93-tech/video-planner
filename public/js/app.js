@@ -2252,9 +2252,9 @@ async function loadAdminChatLogs() {
         if (!sel) return;
         sel.innerHTML = '<option value="">-- Chọn user (' + _adminChatLogs.length + ') --</option>' +
             _adminChatLogs.map((log, i) =>
-                `<option value="${i}">👤 ${log.username} (${log.messageCount} tin nhắn)</option>`
+                `<option value="${i}">👤 ${log.username} — ${log.conversationCount} cuộc hội thoại • ${log.messageCount} tin nhắn</option>`
             ).join('');
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.error('loadAdminChatLogs error:', e); }
 }
 
 function loadChatLogForUser() {
@@ -2262,32 +2262,77 @@ function loadChatLogForUser() {
     const container = document.getElementById('chatLogMessages');
     const countEl = document.getElementById('chatLogCount');
     if (!container || idx === '') {
-        if (container) container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chọn user để xem</p>';
+        if (container) container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chọn user để xem lịch sử chat</p>';
         return;
     }
 
     const log = _adminChatLogs[parseInt(idx)];
-    if (!log || !log.messages.length) {
-        container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chưa có tin nhắn</p>';
+    if (!log) return;
+    if (countEl) countEl.textContent = `${log.conversationCount} cuộc hội thoại • ${log.messageCount} tin nhắn`;
+
+    // Show conversation list
+    if (!log.conversations?.length) {
+        container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chưa có cuộc hội thoại</p>';
         return;
     }
-    if (countEl) countEl.textContent = `${log.messageCount} tin nhắn`;
 
-    container.innerHTML = log.messages.map(m => {
+    container.innerHTML = `
+        <div id="chatLogConvList" style="display:grid;gap:8px">
+            ${log.conversations.map((c, ci) => {
+        const icon = c.title?.startsWith('📺') ? '📺' : '💬';
+        return `<div onclick="showAdminConvMessages(${parseInt(idx)}, ${ci})" style="padding:10px 14px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.15);border-radius:10px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.15)'">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-size:0.85rem;font-weight:600">${icon} ${c.title || 'Untitled'}</span>
+                        <span style="font-size:0.7rem;color:var(--text-secondary)">${c.messageCount} tin</span>
+                    </div>
+                </div>`;
+    }).join('')}
+        </div>
+        <div id="chatLogConvMessages" style="display:none;margin-top:12px"></div>
+    `;
+    container.scrollTop = 0;
+}
+
+function showAdminConvMessages(userIdx, convIdx) {
+    const log = _adminChatLogs[userIdx];
+    if (!log) return;
+    const conv = log.conversations[convIdx];
+    if (!conv) return;
+
+    // Find messages for this conversation from the full messages list
+    // The API sends all messages flattened, but conversations have message counts
+    // Let's slice the right portion
+    let start = 0;
+    for (let i = 0; i < convIdx; i++) start += log.conversations[i].messageCount;
+    const msgs = log.messages.slice(start, start + conv.messageCount);
+
+    const listEl = document.getElementById('chatLogConvList');
+    const msgsEl = document.getElementById('chatLogConvMessages');
+    if (listEl) listEl.style.display = 'none';
+    if (!msgsEl) return;
+    msgsEl.style.display = 'flex';
+    msgsEl.style.flexDirection = 'column';
+    msgsEl.style.gap = '8px';
+
+    msgsEl.innerHTML = `
+        <button onclick="document.getElementById('chatLogConvList').style.display='grid';document.getElementById('chatLogConvMessages').style.display='none'" style="align-self:flex-start;padding:4px 12px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:6px;color:var(--accent-purple);cursor:pointer;font-size:0.75rem;font-family:var(--font-sans)">← Danh sách</button>
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:4px">${conv.title || 'Chat'} (${msgs.length} tin)</div>
+        ${msgs.map(m => {
         const time = new Date(m.time).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
         if (m.role === 'user') {
             return `<div style="align-self:flex-end;max-width:80%;background:linear-gradient(135deg,#8b5cf6,#3b82f6);padding:8px 12px;border-radius:12px;border-top-right-radius:4px;color:white;font-size:0.8rem">
-                <div>${m.content.replace(/\n/g, '<br>')}</div>
-                <div style="font-size:0.6rem;opacity:0.6;text-align:right;margin-top:2px">${time}</div>
-            </div>`;
+                    <div>${m.content.replace(/\n/g, '<br>')}</div>
+                    <div style="font-size:0.6rem;opacity:0.6;text-align:right;margin-top:2px">${time}</div>
+                </div>`;
         } else {
             return `<div style="max-width:80%;background:rgba(139,92,246,0.12);padding:8px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.8rem">
-                <div>${m.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>
-                <div style="font-size:0.6rem;color:var(--text-secondary);margin-top:2px">${time}</div>
-            </div>`;
+                    <div>${m.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>
+                    <div style="font-size:0.6rem;color:var(--text-secondary);margin-top:2px">${time}</div>
+                </div>`;
         }
-    }).join('');
-    container.scrollTop = container.scrollHeight;
+    }).join('')}
+    `;
+    msgsEl.scrollTop = 0;
 }
 
 async function loadAdminDashboard() {
