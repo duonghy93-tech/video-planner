@@ -429,7 +429,7 @@ function renderPlan(plan, targetId) {
                     <span class="style-guide-label">Bảng Màu</span>
                     <div class="color-palette">
                         ${plan.style_guide.color_palette.map(c =>
-                `<div class="color-swatch" style="background:${c}" title="${c}" onclick="navigator.clipboard.writeText('${c}');showToast('Đã copy ${c}')"></div>`
+                `<div class="color-swatch" style="background:${c}" title="${c}" onclick="copyText('${c}');showToast('Đã copy ${c}')"></div>`
             ).join('')}
                     </div>
                 </div>`;
@@ -713,7 +713,7 @@ function renderReview(review, targetId) {
                             ${sol.corrected_prompt ? `
                                 <div style="margin-top:10px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:8px;padding:12px">
                                     <div style="font-size:0.75rem;color:var(--accent-purple);font-weight:600;margin-bottom:6px">📝 PROMPT ĐÃ SỬA (copy để dùng):</div>
-                                    <pre style="white-space:pre-wrap;color:var(--text-secondary);font-size:0.8rem;margin:0;cursor:pointer" onclick="navigator.clipboard.writeText(this.textContent);showToast('Đã copy prompt!')">${sol.corrected_prompt}</pre>
+                                    <pre style="white-space:pre-wrap;color:var(--text-secondary);font-size:0.8rem;margin:0;cursor:pointer" onclick="copyText(this.textContent);showToast('Đã copy prompt!')">${sol.corrected_prompt}</pre>
                                 </div>` : ''}
                         </div>
                     </div>
@@ -903,7 +903,7 @@ async function handleGenerateRefImage(clipId, index, refType) {
 
         const imgSrc = data.imagePath;
         container.innerHTML = `
-        < img src = "${imgSrc}" alt = "${clipId}" loading = "lazy" style = "max-height:280px;border-radius:12px;object-fit:cover" >
+        <img src="${imgSrc}" alt="${clipId}" loading="lazy" style="max-height:280px;border-radius:12px;object-fit:cover">
             <div style="display:flex;gap:6px;margin-top:4px;justify-content:center">
                 <button class="btn-img-action-sm" onclick="downloadImage('${imgSrc}', '${clipId}_opening')" title="Tải">📥 Tải</button>
                 <button class="btn-img-action-sm" onclick="handleUpscaleImage('${clipId}', ${index}, '${imgSrc}')" title="Upscale">🔍 Upscale</button>
@@ -912,12 +912,12 @@ async function handleGenerateRefImage(clipId, index, refType) {
         showToast(`✅ Ảnh opening frame cho ${clipId} `);
     } catch (err) {
         container.innerHTML = `
-        < div style = "aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--accent-red)" >
+        <div style="aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--accent-red)">
                 <span style="color:var(--accent-red);font-size:0.75rem">❌ ${err.message}</span>
                 <button class="btn-generate-img" onclick="handleGenerateRefImage('${clipId}', ${index}, 'start')" style="font-size:0.8rem">
                     🔄 Thử lại
                 </button>
-            </div > `;
+            </div>`;
         showToast('❌ Lỗi: ' + err.message);
     }
 }
@@ -1005,14 +1005,14 @@ async function handleGenerateAllImages() {
 
         // Update images in cards
         data.results.forEach(result => {
-            const container = document.getElementById(`img - ${result.clip_id} `);
+            const container = document.getElementById(`img-${result.clip_id}`);
             if (container && result.success) {
-                container.innerHTML = `< img src = "${result.imagePath}" alt = "${result.clip_id}" loading = "lazy" > `;
+                container.innerHTML = `<img src="${result.imagePath}" alt="${result.clip_id}" loading="lazy">`;
             } else if (container) {
                 container.innerHTML = `
-        < div class="clip-image-placeholder" >
+        <div class="clip-image-placeholder">
             <span style="color:var(--accent-red)">❌ ${result.error}</span>
-                    </div > `;
+                    </div>`;
             }
         });
 
@@ -1026,10 +1026,26 @@ async function handleGenerateAllImages() {
 }
 
 // ============ COPY / DOWNLOAD ============
+// Clipboard fallback for HTTP (navigator.clipboard requires HTTPS)
+function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text);
+    } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    }
+}
+
 function copyClipJson(index) {
     if (!currentPlan || !currentPlan.clips[index]) return;
     const clip = { ...currentPlan.clips[index] };
-    navigator.clipboard.writeText(JSON.stringify(clip, null, 2));
+    copyText(JSON.stringify(clip, null, 2));
     showToast('📋 Đã copy JSON clip!');
 }
 
@@ -1049,7 +1065,7 @@ function copyClipPrompt(index) {
     if (clip.constraints?.artifact_guard) prompt += clip.constraints.artifact_guard + '. ';
     if (clip.constraints?.physics) prompt += clip.constraints.physics + '.';
 
-    navigator.clipboard.writeText(prompt.trim());
+    copyText(prompt.trim());
     showToast('📝 Đã copy prompt video!');
 }
 
@@ -1058,7 +1074,7 @@ function copyAllJson() {
     if (!data) return;
     const clean = { ...data };
     delete clean._outputDir;
-    navigator.clipboard.writeText(JSON.stringify(clean, null, 2));
+    copyText(JSON.stringify(clean, null, 2));
     showToast('📋 Đã copy toàn bộ JSON!');
 }
 
@@ -1079,7 +1095,7 @@ function downloadJson() {
 
 function copyReviewJson() {
     if (!currentReview) return;
-    navigator.clipboard.writeText(JSON.stringify(currentReview, null, 2));
+    copyText(JSON.stringify(currentReview, null, 2));
     showToast('📋 Đã copy JSON đánh giá!');
 }
 
@@ -1319,7 +1335,7 @@ function renderDNAResults(dna, targetId) {
                     <div style="margin-top:12px">
                         <span class="dna-label">Bảng Màu:</span>
                         <div class="color-palette" style="margin-top:6px">
-                            ${sd.color_palette.map(c => `<div class="color-swatch" style="background:${c}" title="${c}" onclick="navigator.clipboard.writeText('${c}');showToast('Đã copy ${c}')"></div>`).join('')}
+                            ${sd.color_palette.map(c => `<div class="color-swatch" style="background:${c}" title="${c}" onclick="copyText('${c}');showToast('Đã copy ${c}')"></div>`).join('')}
                         </div>
                     </div>` : ''}
             </div>`;
@@ -1383,7 +1399,7 @@ function renderDNAResults(dna, targetId) {
 
 function copyDNAJson() {
     if (!currentDNA) return;
-    navigator.clipboard.writeText(JSON.stringify(currentDNA, null, 2));
+    copyText(JSON.stringify(currentDNA, null, 2));
     showToast('📋 Đã copy DNA JSON!');
 }
 
@@ -1982,7 +1998,7 @@ function renderRoadmap() {
                             <div style="flex:1">
                                 <div style="display:flex;align-items:center;gap:6px">
                                     <span style="font-weight:600;font-size:0.95rem">\ud83c\udfac ${video.title}</span>
-                                    <button class="btn-ghost" onclick="navigator.clipboard.writeText('${video.title.replace(/'/g, "\\'")}');showToast('\ud83d\udccb \u0110\u00e3 copy ch\u1ee7 \u0111\u1ec1!')" style="font-size:0.65rem;padding:1px 4px" title="Copy ch\u1ee7 \u0111\u1ec1">\ud83d\udccb</button>
+                                    <button class="btn-ghost" onclick="copyText('${video.title.replace(/'/g, "\\'")}'.trim());showToast('\ud83d\udccb \u0110\u00e3 copy ch\u1ee7 \u0111\u1ec1!')" style="font-size:0.65rem;padding:1px 4px" title="Copy ch\u1ee7 \u0111\u1ec1">\ud83d\udccb</button>
                                 </div>
                                 ${video.idea ? `<div style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px">\ud83d\udca1 ${video.idea}</div>` : ''}
                                 <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;font-size:0.75rem">
@@ -2343,115 +2359,169 @@ async function viewChannelDetail(id, isAdmin) {
     try {
         const url = isAdmin ? '/api/admin/channels/' + id : '/api/channels/' + id;
         const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
-        if (!res.ok) throw new Error('Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c');
+        if (!res.ok) throw new Error('Không tải được');
         const data = await res.json();
         const ch = data.channel;
         const rms = data.roadmaps || [];
 
+        // --- Brief section ---
         let briefHtml = '';
         if (ch.brief) {
-            const formatVal = (v) => typeof v === 'object' ? JSON.stringify(v) : v;
-            briefHtml = `<div class="dna-card" style="margin-top:12px;background:rgba(16,185,129,0.05)">
-                <h4 style="margin:0 0 8px">\ud83d\udccb Chi\u1ebfn L\u01b0\u1ee3c K\u00eanh</h4>
-                <div style="font-size:0.85rem;color:var(--text-secondary);display:grid;gap:6px">
-                    ${ch.brief.target_audience ? `<div>\ud83c\udfaf <strong>\u0110\u1ed1i t\u01b0\u1ee3ng:</strong> ${formatVal(ch.brief.target_audience)}</div>` : ''}
-                    ${ch.brief.tone ? `<div>\ud83c\udfa4 <strong>Tone:</strong> ${formatVal(ch.brief.tone)}</div>` : ''}
-                    ${ch.brief.products ? `<div>\ud83d\udcb0 <strong>S\u1ea3n ph\u1ea9m:</strong> ${formatVal(ch.brief.products)}</div>` : ''}
-                    ${ch.brief.competitors ? `<div>\ud83c\udfc6 <strong>\u0110\u1ed1i th\u1ee7:</strong> ${formatVal(ch.brief.competitors)}</div>` : ''}
-                    ${ch.brief.content_pillars?.length ? `<div>\ud83d\udccc <strong>N\u1ed9i dung ch\u00ednh:</strong> ${Array.isArray(ch.brief.content_pillars) ? ch.brief.content_pillars.join(', ') : formatVal(ch.brief.content_pillars)}</div>` : ''}
-                    ${ch.brief.cta_strategy ? `<div>\ud83d\udce3 <strong>CTA:</strong> ${formatVal(ch.brief.cta_strategy)}</div>` : ''}
-                    ${ch.brief.dos_and_donts ? `<div>\u26a0\ufe0f <strong>L\u01b0u \u00fd:</strong> ${typeof ch.brief.dos_and_donts === 'object' ? (ch.brief.dos_and_donts.do ? '✅ ' + ch.brief.dos_and_donts.do + (ch.brief.dos_and_donts.dont ? ' ❌ ' + ch.brief.dos_and_donts.dont : '') : JSON.stringify(ch.brief.dos_and_donts)) : ch.brief.dos_and_donts}</div>` : ''}
+            const formatVal = (v) => {
+                if (typeof v === 'object' && v !== null) {
+                    if (v.dos || v.donts || v.do || v.dont) {
+                        let parts = [];
+                        if (v.dos || v.do) parts.push('✅ ' + (v.dos || v.do));
+                        if (v.donts || v.dont) parts.push('❌ ' + (v.donts || v.dont));
+                        return parts.join('<br>');
+                    }
+                    return Object.entries(v).map(([k, val]) => `<strong>${k}:</strong> ${val}`).join(', ');
+                }
+                return v;
+            };
+            briefHtml = `<div style="margin-top:16px;padding:16px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.15);border-radius:12px">
+                <h4 style="margin:0 0 12px;font-size:0.95rem">📋 Chiến Lược Kênh</h4>
+                <div style="display:grid;gap:8px;font-size:0.85rem;color:var(--text-secondary)">
+                    ${ch.brief.target_audience ? `<div>🎯 <strong>Đối tượng:</strong> ${formatVal(ch.brief.target_audience)}</div>` : ''}
+                    ${ch.brief.tone ? `<div>🎤 <strong>Tone:</strong> ${formatVal(ch.brief.tone)}</div>` : ''}
+                    ${ch.brief.products ? `<div>💰 <strong>Sản phẩm:</strong> ${formatVal(ch.brief.products)}</div>` : ''}
+                    ${ch.brief.competitors ? `<div>🏆 <strong>Đối thủ:</strong> ${formatVal(ch.brief.competitors)}</div>` : ''}
+                    ${ch.brief.content_pillars?.length ? `<div>📌 <strong>Nội dung chính:</strong> ${Array.isArray(ch.brief.content_pillars) ? ch.brief.content_pillars.join(', ') : formatVal(ch.brief.content_pillars)}</div>` : ''}
+                    ${ch.brief.cta_strategy ? `<div>📣 <strong>CTA:</strong> ${formatVal(ch.brief.cta_strategy)}</div>` : ''}
+                    ${ch.brief.dos_and_donts ? `<div>⚠️ <strong>Lưu ý:</strong><br>${formatVal(ch.brief.dos_and_donts)}</div>` : ''}
                 </div>
             </div>`;
         }
 
+        // --- Social links ---
         let socialHtml = '';
         if (ch.socialLinks) {
             const links = [];
-            if (ch.socialLinks.youtube) links.push(`<a href="${ch.socialLinks.youtube}" target="_blank" style="color:#f87171">\ud83c\udfac YouTube</a>`);
-            if (ch.socialLinks.tiktok) links.push(`<a href="${ch.socialLinks.tiktok}" target="_blank" style="color:#06b6d4">\ud83c\udfb5 TikTok</a>`);
-            if (ch.socialLinks.facebook) links.push(`<a href="${ch.socialLinks.facebook}" target="_blank" style="color:#60a5fa">\ud83d\udcd8 Facebook</a>`);
-            if (links.length) socialHtml = `<div style="margin-top:8px;display:flex;gap:16px">${links.join('')}</div>`;
+            if (ch.socialLinks.youtube) links.push(`<a href="${ch.socialLinks.youtube}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:8px;color:#f87171;font-size:0.8rem;text-decoration:none">▶️ YouTube</a>`);
+            if (ch.socialLinks.tiktok) links.push(`<a href="${ch.socialLinks.tiktok}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.3);border-radius:8px;color:#06b6d4;font-size:0.8rem;text-decoration:none">🎵 TikTok</a>`);
+            if (ch.socialLinks.facebook) links.push(`<a href="${ch.socialLinks.facebook}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);border-radius:8px;color:#60a5fa;font-size:0.8rem;text-decoration:none">📘 Facebook</a>`);
+            if (links.length) socialHtml = `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${links.join('')}</div>`;
         }
 
-        // Aggregate metrics from all roadmaps
-        let metricsHtml = '';
-        let totalViews = 0, totalLikes = 0, totalComments = 0, publishedCount = 0;
+        // --- Per-platform metrics ---
+        let platformStats = { youtube: { views: 0, likes: 0, comments: 0, count: 0 }, tiktok: { views: 0, likes: 0, comments: 0, count: 0 }, facebook: { views: 0, likes: 0, comments: 0, count: 0 } };
+        let totalPublished = 0, totalVideos = 0;
         rms.forEach(r => {
             r.days?.forEach(d => {
                 d.videos?.forEach(v => {
-                    if (v.status === 'published') publishedCount++;
+                    totalVideos++;
+                    if (v.status === 'published') totalPublished++;
                     if (v.metrics) {
-                        ['youtube', 'tiktok', 'facebook', 'instagram'].forEach(p => {
+                        ['youtube', 'tiktok', 'facebook'].forEach(p => {
                             if (v.metrics[p]) {
-                                totalViews += v.metrics[p].views || 0;
-                                totalLikes += v.metrics[p].likes || 0;
-                                totalComments += v.metrics[p].comments || 0;
+                                platformStats[p].views += v.metrics[p].views || 0;
+                                platformStats[p].likes += v.metrics[p].likes || 0;
+                                platformStats[p].comments += v.metrics[p].comments || 0;
+                                platformStats[p].count++;
                             }
                         });
-                        if (typeof v.metrics.views === 'number') totalViews += v.metrics.views;
-                        if (typeof v.metrics.likes === 'number') totalLikes += v.metrics.likes;
-                        if (typeof v.metrics.comments === 'number') totalComments += v.metrics.comments;
+                        // Legacy single metrics
+                        if (typeof v.metrics.views === 'number' && !v.metrics.youtube && !v.metrics.tiktok && !v.metrics.facebook) {
+                            platformStats.youtube.views += v.metrics.views;
+                            platformStats.youtube.likes += v.metrics.likes || 0;
+                            platformStats.youtube.comments += v.metrics.comments || 0;
+                            platformStats.youtube.count++;
+                        }
                     }
                 });
             });
         });
-        if (publishedCount > 0) {
+
+        const hasMetrics = platformStats.youtube.count + platformStats.tiktok.count + platformStats.facebook.count > 0;
+        if (hasMetrics || totalPublished > 0) {
+            const totalViews = platformStats.youtube.views + platformStats.tiktok.views + platformStats.facebook.views;
+            const totalLikes = platformStats.youtube.likes + platformStats.tiktok.likes + platformStats.facebook.likes;
+            const totalComments = platformStats.youtube.comments + platformStats.tiktok.comments + platformStats.facebook.comments;
+
+            const platformCard = (icon, name, color, stats) => {
+                if (stats.count === 0) return '';
+                return `<div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:10px;border-left:3px solid ${color}">
+                    <div style="font-size:0.8rem;font-weight:600;color:${color};margin-bottom:8px">${icon} ${name} <span style="font-weight:400;font-size:0.7rem;color:var(--text-secondary)">(${stats.count} video)</span></div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+                        <div><div style="font-weight:700;color:var(--text-primary)">${stats.views.toLocaleString()}</div><div style="font-size:0.65rem;color:var(--text-secondary)">Lượt xem</div></div>
+                        <div><div style="font-weight:700;color:var(--text-primary)">${stats.likes.toLocaleString()}</div><div style="font-size:0.65rem;color:var(--text-secondary)">Thích</div></div>
+                        <div><div style="font-weight:700;color:var(--text-primary)">${stats.comments.toLocaleString()}</div><div style="font-size:0.65rem;color:var(--text-secondary)">Bình luận</div></div>
+                    </div>
+                </div>`;
+            };
+
             metricsHtml = `
-            <div style="margin-top:16px;padding:16px;background:linear-gradient(135deg, rgba(139,92,246,0.1), rgba(59,130,246,0.1));border-radius:12px;border:1px solid rgba(139,92,246,0.2)">
-                <h4 style="margin:0 0 12px">\ud83d\udcca T\u1ed5ng Quan Metrics</h4>
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
-                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
-                        <div style="font-size:1.3rem;font-weight:700;color:#8b5cf6">${publishedCount}</div>
-                        <div style="font-size:0.7rem;color:var(--text-secondary)">\u0110\u00e3 \u0111\u0103ng</div>
+            <div style="margin-top:16px;padding:16px;background:linear-gradient(135deg, rgba(139,92,246,0.08), rgba(59,130,246,0.08));border-radius:12px;border:1px solid rgba(139,92,246,0.15)">
+                <h4 style="margin:0 0 12px;font-size:0.95rem">📊 Tổng Quan Metrics</h4>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-bottom:16px">
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.2rem;font-weight:700;color:#8b5cf6">${totalPublished}<span style="font-size:0.7rem;color:var(--text-secondary)">/${totalVideos}</span></div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary)">Đã đăng</div>
                     </div>
-                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
-                        <div style="font-size:1.3rem;font-weight:700;color:#3b82f6">${totalViews.toLocaleString()}</div>
-                        <div style="font-size:0.7rem;color:var(--text-secondary)">\ud83d\udc41 L\u01b0\u1ee3t xem</div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.2rem;font-weight:700;color:#3b82f6">${totalViews.toLocaleString()}</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary)">👁 Tổng xem</div>
                     </div>
-                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
-                        <div style="font-size:1.3rem;font-weight:700;color:#ef4444">${totalLikes.toLocaleString()}</div>
-                        <div style="font-size:0.7rem;color:var(--text-secondary)">\u2764\ufe0f L\u01b0\u1ee3t th\u00edch</div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.2rem;font-weight:700;color:#ef4444">${totalLikes.toLocaleString()}</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary)">❤️ Tổng thích</div>
                     </div>
-                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px">
-                        <div style="font-size:1.3rem;font-weight:700;color:#10b981">${totalComments.toLocaleString()}</div>
-                        <div style="font-size:0.7rem;color:var(--text-secondary)">\ud83d\udcac B\u00ecnh lu\u1eadn</div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <div style="font-size:1.2rem;font-weight:700;color:#10b981">${totalComments.toLocaleString()}</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary)">💬 Bình luận</div>
                     </div>
+                </div>
+                <div style="display:grid;gap:8px">
+                    ${platformCard('▶️', 'YouTube', '#f87171', platformStats.youtube)}
+                    ${platformCard('🎵', 'TikTok', '#06b6d4', platformStats.tiktok)}
+                    ${platformCard('📘', 'Facebook', '#60a5fa', platformStats.facebook)}
                 </div>
             </div>`;
         }
 
-        let roadmapsHtml = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 roadmap</p>';
+        // --- Roadmaps section ---
+        let roadmapsHtml = '<p style="color:var(--text-secondary);font-style:italic;font-size:0.85rem">Chưa có roadmap. Tạo roadmap tại tab "Kênh".</p>';
         if (rms.length) {
             roadmapsHtml = rms.map(r => {
                 const total = r.days?.reduce((s, d) => s + (d.videos?.length || 0), 0) || 0;
                 const done = r.days?.reduce((s, d) => s + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
-                return `<div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="document.getElementById('channelDetailModal').classList.remove('active');currentRoadmapChannelId='${ch.id}';currentRoadmap=${JSON.stringify(r).replace(/'/g, "\\'")}; renderRoadmap();">
-                    <div style="display:flex;justify-content:space-between">
-                        <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
-                        <span style="color:var(--text-secondary);font-size:0.8rem">${r.week_start || ''} \u2022 ${done}/${total} \u0111\u00e3 \u0111\u0103ng</span>
+                const pct = total > 0 ? Math.round(done / total * 100) : 0;
+                return `<div style="padding:12px;background:rgba(0,0,0,0.15);border-radius:10px;border:1px solid rgba(139,92,246,0.15);cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.15)'" onclick="document.getElementById('channelDetailModal').classList.remove('active');currentRoadmapChannelId='${ch.id}';currentRoadmap=${JSON.stringify(r).replace(/'/g, "\\\\'")};renderRoadmap();">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <strong style="font-size:0.9rem">🗓️ ${r.roadmap_name || 'Roadmap'}</strong>
+                        <span style="color:var(--text-secondary);font-size:0.75rem">${r.week_start || ''}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">
+                            <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#8b5cf6,#3b82f6);border-radius:3px;transition:width 0.3s"></div>
+                        </div>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);white-space:nowrap">${done}/${total} <span style="color:${pct === 100 ? '#10b981' : '#8b5cf6'}">(${pct}%)</span></span>
                     </div>
                 </div>`;
             }).join('');
         }
 
-        document.getElementById('channelDetailTitle').textContent = '\ud83d\udcfa ' + ch.name;
+        document.getElementById('channelDetailTitle').textContent = '📺 ' + ch.name;
         document.getElementById('channelDetailBody').innerHTML = `
-            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;color:var(--text-secondary)">
-                ${ch.niche ? `<span>\ud83c\udff7\ufe0f ${ch.niche}</span>` : ''}
-                <span>${ch.language === 'VN' ? '\ud83c\uddfb\ud83c\uddf3 Ti\u1ebfng Vi\u1ec7t' : '\ud83c\uddfa\ud83c\uddf8 English (US)'}</span>
-                <span>\ud83d\udcc5 ${ch.postsPerDay} video/ng\u00e0y</span>
-                ${data.ownerName ? `<span>\ud83d\udc64 @${data.ownerName}</span>` : ''}
+            <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:0.85rem;color:var(--text-secondary);margin-bottom:4px">
+                ${ch.niche ? `<span style="padding:3px 10px;background:rgba(139,92,246,0.15);border-radius:6px;font-size:0.8rem">🏷️ ${ch.niche}</span>` : ''}
+                <span style="padding:3px 10px;background:rgba(59,130,246,0.15);border-radius:6px;font-size:0.8rem">${ch.language === 'VN' ? '🇻🇳 Tiếng Việt' : '🇺🇸 English (US)'}</span>
+                <span style="padding:3px 10px;background:rgba(16,185,129,0.15);border-radius:6px;font-size:0.8rem">📅 ${ch.postsPerDay} video/ngày</span>
+                ${data.ownerName ? `<span style="padding:3px 10px;background:rgba(248,113,113,0.15);border-radius:6px;font-size:0.8rem">👤 @${data.ownerName}</span>` : ''}
             </div>
-            ${ch.description ? `<p style="margin-top:10px;color:var(--text-secondary);font-size:0.9rem">${ch.description}</p>` : ''}
+            ${ch.description ? `<p style="margin-top:10px;color:var(--text-secondary);font-size:0.88rem;line-height:1.5">${ch.description}</p>` : ''}
             ${socialHtml}
             ${briefHtml}
             ${metricsHtml}
-            <h4 style="margin:20px 0 10px">\ud83d\uddd3\ufe0f Roadmaps (${rms.length})</h4>
-            ${roadmapsHtml}
+            <div style="margin-top:20px">
+                <h4 style="margin:0 0 12px;display:flex;align-items:center;gap:8px;font-size:0.95rem">
+                    🗓️ Roadmaps <span style="background:var(--accent-purple);color:white;font-size:0.7rem;padding:2px 8px;border-radius:10px">${rms.length}</span>
+                </h4>
+                <div style="display:grid;gap:8px">${roadmapsHtml}</div>
+            </div>
         `;
         document.getElementById('channelDetailModal').classList.add('active');
-    } catch (err) { showToast('\u274c ' + err.message); }
+    } catch (err) { showToast('❌ ' + err.message); }
 }
 
 // ============ AUTO-SCAN & WEEKLY SUMMARY ============
