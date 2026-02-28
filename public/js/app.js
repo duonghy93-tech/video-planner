@@ -125,6 +125,7 @@ function switchTab(tabName) {
     // Auto-load data when tab is switched
     if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); }
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
+    if (tabName === 'profile') { loadProfile(); }
 }
 
 function setupTabs() {
@@ -2931,4 +2932,117 @@ function getExportButtons(roadmapId) {
         <button class="btn-ghost btn-sm" onclick="exportRoadmap('${roadmapId}','json')" title="Export JSON">📥 JSON</button>
         <button class="btn-ghost btn-sm" onclick="importRoadmap()" title="Import Roadmap">📤 Import</button>
     `;
+}
+
+// ============ PROFILE TAB ============
+async function loadProfile() {
+    try {
+        // Load user info
+        const res = await fetch('/api/profile', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        const user = await res.json();
+
+        const avatar = document.getElementById('profileAvatar');
+        if (avatar) avatar.textContent = (user.name || user.username || '?').charAt(0).toUpperCase();
+        const nameEl = document.getElementById('profileName');
+        if (nameEl) nameEl.textContent = user.name || user.username;
+        const roleEl = document.getElementById('profileRole');
+        if (roleEl) roleEl.textContent = `@${user.username} • ${user.role}`;
+        const fullNameInput = document.getElementById('profileFullName');
+        if (fullNameInput) fullNameInput.value = user.name || '';
+
+        // Load API key
+        const apiKeyInput = document.getElementById('profileApiKey');
+        if (apiKeyInput) apiKeyInput.value = getStoredApiKey() || '';
+
+        // Load channels
+        const chRes = await fetch('/api/channels', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (chRes.ok) {
+            const channels = await chRes.json();
+            const chList = document.getElementById('profileChannelList');
+            if (chList) {
+                if (!channels.length) {
+                    chList.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem">Chưa có kênh nào. Tạo kênh ở tab "Kênh Của Tôi".</p>';
+                } else {
+                    chList.innerHTML = channels.map(c => `
+                        <div class="dna-card" style="padding:12px;cursor:pointer;transition:all 0.2s" onclick="switchTab('channels');setTimeout(()=>viewChannelDetail('${c.id}'),300)" 
+                            onmouseover="this.style.borderColor='rgba(139,92,246,0.5)'" onmouseout="this.style.borderColor='var(--border)'">
+                            <div style="display:flex;justify-content:space-between;align-items:center">
+                                <div>
+                                    <strong>📺 ${c.name}</strong>
+                                    <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">${c.category || ''} • ${c.country || ''}</span>
+                                </div>
+                                <span style="color:var(--text-secondary);font-size:0.75rem">${c.frequency || '1 video/ngày'}</span>
+                            </div>
+                        </div>`).join('');
+                }
+            }
+        }
+
+        // Load history into profile
+        const hRes = await fetch('/api/history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (hRes.ok) {
+            const historyItems = await hRes.json();
+            const hList = document.getElementById('profileHistoryList');
+            if (hList) {
+                if (!historyItems.length) {
+                    hList.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem">Chưa có lịch sử tạo video</p>';
+                } else {
+                    hList.innerHTML = historyItems.map(h => `
+                        <div class="dna-card" style="padding:10px;margin-bottom:6px;cursor:pointer;transition:all 0.2s" onclick="useHistoryItem(this)" 
+                            data-desc="${(h.description || '').replace(/"/g, '&quot;')}" data-duration="${h.duration || 24}"
+                            onmouseover="this.style.borderColor='rgba(139,92,246,0.5)'" onmouseout="this.style.borderColor='var(--border)'">
+                            <div style="display:flex;justify-content:space-between;align-items:center">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:0.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.description || 'Video'}</div>
+                                    <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px">
+                                        ${h.presetName ? '📂 ' + h.presetName + ' • ' : ''}${h.clipCount || 0} clips • ${h.duration || 0}s
+                                    </div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <span style="font-size:0.65rem;color:var(--text-secondary)">${new Date(h.createdAt).toLocaleDateString('vi-VN')}</span>
+                                    <button class="btn-ghost btn-sm" onclick="event.stopPropagation();deleteHistoryItem('${h.id}')" title="Xóa">🗑️</button>
+                                </div>
+                            </div>
+                        </div>`).join('');
+                }
+            }
+        }
+    } catch (e) { console.error('Profile load error:', e); }
+}
+
+async function updateProfile() {
+    const name = document.getElementById('profileFullName')?.value;
+    try {
+        const res = await fetch('/api/profile', {
+            method: 'PUT', headers: getApiHeaders(),
+            body: JSON.stringify({ name })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showToast('✅ Đã cập nhật thông tin!');
+        loadProfile();
+    } catch (e) { showToast('❌ Lỗi: ' + e.message); }
+}
+
+async function changePassword() {
+    const pw = document.getElementById('profileNewPassword')?.value;
+    if (!pw || pw.length < 4) return showToast('⚠️ Mật khẩu tối thiểu 4 ký tự');
+    try {
+        const res = await fetch('/api/profile/password', {
+            method: 'PUT', headers: getApiHeaders(),
+            body: JSON.stringify({ newPassword: pw })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        document.getElementById('profileNewPassword').value = '';
+        showToast('✅ Đã đổi mật khẩu!');
+    } catch (e) { showToast('❌ Lỗi: ' + e.message); }
+}
+
+function saveProfileApiKey() {
+    const key = document.getElementById('profileApiKey')?.value;
+    if (key) {
+        localStorage.setItem('gemini_api_key', key);
+        configureApiKey(key);
+        showToast('✅ Đã lưu API Key!');
+    }
 }

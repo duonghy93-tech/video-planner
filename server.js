@@ -782,6 +782,37 @@ app.get('/api/roadmaps/:id/summary', auth.authMiddleware, (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============ PROFILE ============
+app.get('/api/profile', auth.authMiddleware, (req, res) => {
+    res.json({ id: req.user.id, username: req.user.username, name: req.user.name || '', role: req.user.role });
+});
+
+app.put('/api/profile', auth.authMiddleware, (req, res) => {
+    try {
+        const { name } = req.body;
+        const users = JSON.parse(fs.readFileSync(path.join(dataDir, 'users.json'), 'utf-8'));
+        const user = users.find(u => u.id === req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (name !== undefined) user.name = name;
+        fs.writeFileSync(path.join(dataDir, 'users.json'), JSON.stringify(users, null, 2));
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/profile/password', auth.authMiddleware, (req, res) => {
+    try {
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 4) return res.status(400).json({ error: 'Mật khẩu tối thiểu 4 ký tự' });
+        const bcrypt = require('bcryptjs');
+        const users = JSON.parse(fs.readFileSync(path.join(dataDir, 'users.json'), 'utf-8'));
+        const user = users.find(u => u.id === req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        user.passwordHash = bcrypt.hashSync(newPassword, 10);
+        fs.writeFileSync(path.join(dataDir, 'users.json'), JSON.stringify(users, null, 2));
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Configure API key at runtime (per-session, not saved to disk)
 app.post('/api/config', (req, res) => {
     try {
@@ -1052,7 +1083,8 @@ app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()),
 
         // Save to history per user
         const userId = req.user?.id || 'anonymous';
-        const history = readJsonFile(HISTORY_FILE) || {};
+        let history = readJsonFile(HISTORY_FILE) || {};
+        if (Array.isArray(history)) history = {}; // safeguard
         if (!history[userId]) history[userId] = [];
         history[userId].unshift({
             id: 'h_' + Date.now().toString(36),
