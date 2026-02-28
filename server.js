@@ -1448,6 +1448,8 @@ app.post('/api/chat', auth.authMiddleware, chatUpload.single('file'), async (req
 
         const systemPrompt = `Bạn là trợ lý AI chuyên nghiệp về chiến lược nội dung video ngắn (TikTok, YouTube Shorts, Facebook Reels).
 
+Ngày giờ hiện tại: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+
 Thông tin user: ${req.user.username}
 Kênh: ${channels.map(c => `"${c.name}" (${c.category})`).join(', ') || 'chưa có'}
 Roadmaps: ${roadmaps.length}
@@ -1463,6 +1465,9 @@ Khả năng của bạn:
 - Phân tích đối thủ
 - Tính toán ROI content
 - Tips viral: retention, CTR, engagement
+- Phân tích hình ảnh, video, tài liệu được gửi kèm
+
+Bạn có khả năng tìm kiếm Google để lấy thông tin mới nhất. Khi user hỏi về trend, tin tức, hoặc thông tin thời sự, hãy sử dụng tìm kiếm để trả lời chính xác.
 
 Trả lời chi tiết, có cấu trúc rõ ràng (dùng heading, bullet, numbered list). Dùng emoji. Ưu tiên tiếng Việt.`;
 
@@ -1479,7 +1484,8 @@ Trả lời chi tiết, có cấu trúc rõ ràng (dùng heading, bullet, number
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-pro',
-            systemInstruction: systemPrompt
+            systemInstruction: systemPrompt,
+            tools: [{ googleSearch: {} }]
         });
 
         // Build message parts (text + optional file)
