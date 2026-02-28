@@ -318,6 +318,7 @@ ${buildClipJsonSchema('(based on video length, ceil(video_length / 8))')}
 
 IMPORTANT: 
 - Return ONLY the JSON, no markdown formatting, no code blocks.
+${langFormat === 'VN' || !langFormat ? '- ALL descriptions, storyline, style_guide, audio, dialogue MUST be written in Vietnamese (tiếng Việt) for user comprehension. Only keep ref_image prompts, appearance, clothing, constraints, timeline.camera, timeline.action in English for AI generation quality.' : ''}
 ${buildLanguageRules(langFormat || 'VN')}`;
 
     const videoPart = await uploadVideoForAnalysis(videoBuffer, mimeType);

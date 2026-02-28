@@ -146,7 +146,7 @@ function switchTab(tabName) {
     // Auto-load data when tab is switched
     if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); loadAdminChatLogs(); }
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
-    if (tabName === 'analyze') { loadAnalysisHistory(); }
+    if (tabName === 'video') { loadAnalysisHistory(); }
     if (tabName === 'review') { loadReviewHistory(); }
     if (tabName === 'profile') { loadProfile(); }
     if (tabName === 'channels') { renderUserCharts(); }
@@ -1591,7 +1591,7 @@ function copyDNAJson() {
 // ============ PRESET MANAGEMENT ============
 async function loadPresets() {
     try {
-        const res = await fetch('/api/presets');
+        const res = await fetch('/api/presets', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
         const data = await res.json();
         savedPresets = data.presets || [];
         updatePresetDropdown();
