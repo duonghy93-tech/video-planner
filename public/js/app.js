@@ -1752,7 +1752,7 @@ function closePresetManager() {
 // ============ CHARACTER LIBRARY ============
 async function loadCharacters() {
     try {
-        const res = await fetch('/api/characters');
+        const res = await fetch('/api/characters', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
         const data = await res.json();
         savedCharacters = data.characters || [];
     } catch (e) {
