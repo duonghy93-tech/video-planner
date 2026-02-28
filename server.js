@@ -1968,12 +1968,12 @@ app.get('/api/characters', auth.authMiddleware, (req, res) => {
     const chars = readJsonFile(CHARACTERS_FILE) || [];
     const userId = req.user.id;
     const filtered = (req.user.role === 'admin') ? chars : chars.filter(c => c.userId === userId);
-    res.json(filtered);
+    res.json({ characters: filtered });
 });
 
 app.post('/api/characters', auth.authMiddleware, (req, res) => {
     try {
-        const { name, characterId, gender, age, species, appearance, personality, backstory, imageUrl, voiceStyle } = req.body;
+        const { name, characterId, gender, age, species, appearance, personality, backstory, imageUrl, voiceStyle, role_in_video, clothing, ref_prompt, source } = req.body;
         if (!name) return res.status(400).json({ error: 'Character name required' });
 
         const chars = readJsonFile(CHARACTERS_FILE) || [];
@@ -1983,7 +1983,8 @@ app.post('/api/characters', auth.authMiddleware, (req, res) => {
             username: req.user.username,
             name, characterId, gender, age, species,
             appearance, personality, backstory,
-            imageUrl, voiceStyle,
+            imageUrl, voiceStyle, role_in_video,
+            clothing, ref_prompt, source,
             createdAt: new Date().toISOString()
         };
         chars.push(char);
