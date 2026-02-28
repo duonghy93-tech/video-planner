@@ -120,6 +120,7 @@ if (!fs.existsSync(dataDir)) {
 const PRESETS_FILE = path.join(dataDir, 'presets.json');
 const CHARACTERS_FILE = path.join(dataDir, 'characters.json');
 const HISTORY_FILE = path.join(dataDir, 'history.json');
+const TEMPLATES_FILE = path.join(dataDir, 'templates.json');
 
 // ============ JSON STORAGE HELPERS ============
 function readJsonFile(filePath) {
@@ -393,6 +394,13 @@ app.delete('/api/channels/:id', auth.authMiddleware, (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// Get roadmaps for a specific channel
+app.get('/api/channels/:id/roadmaps', auth.authMiddleware, (req, res) => {
+    const roadmaps = readJsonFile(ROADMAPS_FILE) || [];
+    const channelRoadmaps = roadmaps.filter(r => r.channelId === req.params.id && r.userId === req.user.id);
+    res.json(channelRoadmaps);
 });
 
 // ============ ROADMAP ROUTES ============
@@ -1086,6 +1094,144 @@ app.delete('/api/history/:id', auth.optionalAuth || ((req, res, next) => next())
     res.json({ success: true });
 });
 
+
+// ============ TEMPLATE LIBRARY ============
+app.get('/api/templates', (req, res) => {
+    const templates = readJsonFile(TEMPLATES_FILE) || [];
+    res.json(templates);
+});
+
+app.post('/api/templates', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const { name, category, thumbnail, description, defaultDuration, defaultLang, tags } = req.body;
+    if (!name || !description) return res.status(400).json({ error: 'Thiếu tên hoặc mô tả' });
+    const templates = readJsonFile(TEMPLATES_FILE) || [];
+    const tpl = {
+        id: 'tpl_' + Date.now().toString(36),
+        name, category: category || 'custom', thumbnail: thumbnail || '📝',
+        description, defaultDuration: defaultDuration || 24, defaultLang: defaultLang || 'VN',
+        tags: tags || [], custom: true
+    };
+    templates.push(tpl);
+    writeJsonFile(TEMPLATES_FILE, templates);
+    res.json({ success: true, template: tpl });
+});
+
+app.delete('/api/templates/:id', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    let templates = readJsonFile(TEMPLATES_FILE) || [];
+    templates = templates.filter(t => t.id !== req.params.id);
+    writeJsonFile(TEMPLATES_FILE, templates);
+    res.json({ success: true });
+});
+
+// ============ EXPORT / IMPORT ROADMAPS ============
+app.get('/api/roadmaps/:id/export', auth.authMiddleware, (req, res) => {
+    const roadmaps = readJsonFile(ROADMAPS_FILE);
+    const rm = roadmaps.find(r => r.id === req.params.id);
+    if (!rm) return res.status(404).json({ error: 'Không tìm thấy roadmap' });
+
+    const format = req.query.format || 'json';
+    if (format === 'csv') {
+        let csv = 'Day,Date,Theme,Title,Idea,Hook Type,Post Time,Hashtags,Status,YouTube Views,TikTok Views,FB Views\n';
+        rm.days?.forEach(d => {
+            d.videos?.forEach(v => {
+                const ytViews = v.metrics?.youtube?.views || v.metrics?.views || 0;
+                const ttViews = v.metrics?.tiktok?.views || 0;
+                const fbViews = v.metrics?.facebook?.views || 0;
+                csv += `${d.day},"${d.date || ''}","${d.theme || ''}","${(v.title || '').replace(/"/g, '""')}","${(v.idea || '').replace(/"/g, '""')}","${v.hook_type || ''}","${v.post_time || ''}","${(v.hashtags || []).join(' ')}",${v.status || 'pending'},${ytViews},${ttViews},${fbViews}\n`;
+            });
+        });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${rm.roadmap_name || 'roadmap'}.csv"`);
+        return res.send('\uFEFF' + csv); // BOM for Excel UTF-8
+    }
+
+    // JSON format
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${rm.roadmap_name || 'roadmap'}.json"`);
+    res.json(rm);
+});
+
+app.post('/api/roadmaps/import', auth.authMiddleware, (req, res) => {
+    try {
+        const rmData = req.body;
+        if (!rmData.days || !rmData.roadmap_name) {
+            return res.status(400).json({ error: 'Invalid roadmap format: cần roadmap_name và days' });
+        }
+        const roadmaps = readJsonFile(ROADMAPS_FILE) || [];
+        const newRm = {
+            ...rmData,
+            id: 'rm_' + Date.now().toString(36),
+            userId: req.user.id,
+            channelId: rmData.channelId || null,
+            importedAt: new Date().toISOString()
+        };
+        roadmaps.push(newRm);
+        writeJsonFile(ROADMAPS_FILE, roadmaps);
+        res.json({ success: true, roadmap: newRm });
+    } catch (e) {
+        res.status(400).json({ error: 'Lỗi import: ' + e.message });
+    }
+});
+
+// ============ ANALYTICS ============
+app.get('/api/admin/analytics', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const roadmaps = readJsonFile(ROADMAPS_FILE) || [];
+
+    // Aggregate by platform
+    const platformStats = { youtube: { views: 0, likes: 0, comments: 0, count: 0 }, tiktok: { views: 0, likes: 0, comments: 0, count: 0 }, facebook: { views: 0, likes: 0, comments: 0, count: 0 } };
+    // Aggregate by date
+    const dailyStats = {};
+    let totalPublished = 0, totalPending = 0;
+
+    roadmaps.forEach(rm => {
+        rm.days?.forEach(d => {
+            d.videos?.forEach(v => {
+                if (v.status === 'published') totalPublished++;
+                else totalPending++;
+
+                if (v.metrics) {
+                    // Per-platform metrics
+                    for (const p of ['youtube', 'tiktok', 'facebook']) {
+                        if (v.metrics[p]) {
+                            platformStats[p].views += v.metrics[p].views || 0;
+                            platformStats[p].likes += v.metrics[p].likes || 0;
+                            platformStats[p].comments += v.metrics[p].comments || 0;
+                            platformStats[p].count++;
+                        }
+                    }
+                    // Legacy single metrics
+                    if (v.metrics.views && !v.metrics.youtube && !v.metrics.tiktok && !v.metrics.facebook) {
+                        platformStats.youtube.views += v.metrics.views || 0;
+                        platformStats.youtube.likes += v.metrics.likes || 0;
+                        platformStats.youtube.comments += v.metrics.comments || 0;
+                        platformStats.youtube.count++;
+                    }
+                    // Daily aggregation
+                    const date = v.metrics.scannedAt?.substring(0, 10) || d.date || 'unknown';
+                    if (!dailyStats[date]) dailyStats[date] = { views: 0, likes: 0, comments: 0 };
+                    const allViews = (v.metrics.youtube?.views || 0) + (v.metrics.tiktok?.views || 0) + (v.metrics.facebook?.views || 0) + (v.metrics.views || 0);
+                    const allLikes = (v.metrics.youtube?.likes || 0) + (v.metrics.tiktok?.likes || 0) + (v.metrics.facebook?.likes || 0) + (v.metrics.likes || 0);
+                    dailyStats[date].views += allViews;
+                    dailyStats[date].likes += allLikes;
+                }
+            });
+        });
+    });
+
+    // Sort daily stats by date
+    const sortedDaily = Object.entries(dailyStats).sort(([a], [b]) => a.localeCompare(b)).slice(-30);
+
+    res.json({
+        platformStats,
+        dailyStats: sortedDaily.map(([date, stats]) => ({ date, ...stats })),
+        totalPublished,
+        totalPending,
+        totalVideos: totalPublished + totalPending
+    });
+});
 
 // POST /api/generate-image
 app.post('/api/generate-image', async (req, res) => {

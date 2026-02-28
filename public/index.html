@@ -107,6 +107,18 @@
                 <div id="adminStats"
                     style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px"></div>
 
+                <!-- Analytics Charts -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+                    <div class="dna-card" style="padding:16px">
+                        <h4 style="margin:0 0 12px 0;font-size:0.9rem">📈 Views Theo Ngày</h4>
+                        <canvas id="chartDaily" height="200"></canvas>
+                    </div>
+                    <div class="dna-card" style="padding:16px">
+                        <h4 style="margin:0 0 12px 0;font-size:0.9rem">🎯 Views Theo Platform</h4>
+                        <canvas id="chartPlatform" height="200"></canvas>
+                    </div>
+                </div>
+
                 <!-- Create user form -->
                 <div class="dna-card" style="border:1px dashed var(--accent-purple);margin-bottom:24px">
                     <h3>➕ Tạo Tài Khoản Nhân Viên</h3>
@@ -264,6 +276,30 @@
                         </div>
                     </div>
                     <div class="preset-badge" id="presetBadge" style="display:none;"></div>
+                </div>
+
+                <!-- Channel + Roadmap Task Selector -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px">
+                    <div class="form-group">
+                        <label>📺 Kênh cần tạo video (tùy chọn)</label>
+                        <select id="channelForGenerate" onchange="onChannelForGenerateChange()" style="width:100%">
+                            <option value="">-- Không chọn kênh --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>📋 Công việc hôm nay</label>
+                        <select id="roadmapTaskSelect" onchange="onRoadmapTaskSelect()" style="width:100%" disabled>
+                            <option value="">-- Chọn kênh trước --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Template Selector -->
+                <div class="form-group">
+                    <label>🎨 Chọn Template (tùy chọn)</label>
+                    <div id="templateGrid"
+                        style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;max-height:180px;overflow-y:auto;padding:4px">
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -615,7 +651,8 @@ VD:
     <!-- Toast -->
     <div class="toast" id="toast"></div>
 
-    <script src="/js/app.js?v=20260226c"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="/js/app.js?v=20260228a"></script>
 </body>
 
 </html>

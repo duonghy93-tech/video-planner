@@ -78,6 +78,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCharacters();
     loadMyChannels();
     loadHistory();
+    loadTemplates();
+    loadChannelsForGenerator();
 
     // Auto-fill API key input from localStorage
     const savedKey = getStoredApiKey();
@@ -121,8 +123,8 @@ function switchTab(tabName) {
     const panel = document.getElementById(`panel${capitalize(tabName)}`);
     if (panel) panel.classList.add('active');
     // Auto-load data when tab is switched
-    if (tabName === 'admin') loadAdminDashboard();
-    if (tabName === 'text') loadHistory();
+    if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); }
+    if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
 }
 
 function setupTabs() {
@@ -2631,4 +2633,302 @@ async function loadWeeklySummary(roadmapId) {
             ${s.bestVideo ? `<div style="margin-top:6px;font-size:0.85rem;color:#10b981">\ud83c\udfc6 Best: "${s.bestVideo.title}" (${(s.bestVideo.views || 0).toLocaleString()} views)</div>` : ''}
         </div>`;
     } catch (e) { return ''; }
+}
+
+// ============ TEMPLATE LIBRARY ============
+async function loadTemplates() {
+    const grid = document.getElementById('templateGrid');
+    if (!grid) return;
+    try {
+        const res = await fetch('/api/templates');
+        const templates = await res.json();
+        if (!templates.length) {
+            grid.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem">Chưa có template</p>';
+            return;
+        }
+        grid.innerHTML = templates.map(t => `
+            <div class="tpl-card" onclick="selectTemplate(this)" data-desc="${t.description.replace(/"/g, '&quot;')}" data-duration="${t.defaultDuration}" data-lang="${t.defaultLang || 'VN'}"
+                style="padding:10px;background:rgba(0,0,0,0.2);border-radius:10px;border:1px solid var(--border);cursor:pointer;transition:all 0.2s;text-align:center"
+                onmouseover="this.style.borderColor='rgba(139,92,246,0.5)';this.style.transform='translateY(-2px)'"
+                onmouseout="if(!this.classList.contains('tpl-active')){this.style.borderColor='var(--border)';this.style.transform='none'}">
+                <div style="font-size:1.5rem;margin-bottom:4px">${t.thumbnail}</div>
+                <div style="font-size:0.75rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name.replace(/^[^\s]+\s/, '')}</div>
+                <div style="font-size:0.65rem;color:var(--text-secondary);margin-top:2px">${t.defaultDuration}s • ${(t.tags || []).slice(0, 2).join(', ')}</div>
+            </div>`).join('');
+    } catch (e) { console.error('Template load error:', e); }
+}
+
+function selectTemplate(el) {
+    // Deselect all
+    document.querySelectorAll('.tpl-card').forEach(c => {
+        c.classList.remove('tpl-active');
+        c.style.borderColor = 'var(--border)';
+        c.style.transform = 'none';
+    });
+    // Select this one
+    el.classList.add('tpl-active');
+    el.style.borderColor = '#8b5cf6';
+    el.style.transform = 'translateY(-2px)';
+    // Fill form
+    const desc = el.dataset.desc;
+    const dur = parseInt(el.dataset.duration) || 24;
+    document.getElementById('textDescription').value = desc;
+    document.getElementById('durationInput').value = dur;
+    document.getElementById('durationSlider').value = dur;
+    // Update clip count
+    const clipCount = Math.ceil(dur / 8);
+    const clipEl = document.getElementById('clipCount');
+    if (clipEl) clipEl.textContent = `= ${clipCount} clips × 8s`;
+    showToast('🎨 Đã chọn template — bạn có thể chỉnh sửa mô tả!');
+}
+
+// ============ ANALYTICS CHARTS ============
+let chartDaily = null, chartPlatform = null;
+
+async function renderAnalyticsCharts() {
+    if (typeof Chart === 'undefined') return; // Chart.js not loaded
+    try {
+        const res = await fetch('/api/admin/analytics', {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Daily Views Line Chart
+        const dailyCtx = document.getElementById('chartDaily')?.getContext('2d');
+        if (dailyCtx) {
+            if (chartDaily) chartDaily.destroy();
+            chartDaily = new Chart(dailyCtx, {
+                type: 'line',
+                data: {
+                    labels: data.dailyStats.map(d => d.date.substring(5)),
+                    datasets: [{
+                        label: 'Views',
+                        data: data.dailyStats.map(d => d.views),
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139,92,246,0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3
+                    }, {
+                        label: 'Likes',
+                        data: data.dailyStats.map(d => d.likes),
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239,68,68,0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af', font: { size: 11 } } } },
+                    scales: {
+                        x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+        }
+
+        // Platform Doughnut Chart
+        const platCtx = document.getElementById('chartPlatform')?.getContext('2d');
+        if (platCtx) {
+            if (chartPlatform) chartPlatform.destroy();
+            const ps = data.platformStats;
+            chartPlatform = new Chart(platCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['YouTube', 'TikTok', 'Facebook'],
+                    datasets: [{
+                        data: [ps.youtube.views, ps.tiktok.views, ps.facebook.views],
+                        backgroundColor: ['#ef4444', '#00f2ea', '#1877f2'],
+                        borderColor: ['#dc2626', '#00d4cc', '#1564c0'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#9ca3af', font: { size: 11 }, padding: 12 } },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    const platform = ctx.label.toLowerCase();
+                                    const s = ps[platform] || {};
+                                    return `${ctx.label}: ${(s.views || 0).toLocaleString()} views, ${(s.likes || 0).toLocaleString()} likes`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    } catch (e) { console.error('Analytics error:', e); }
+}
+
+// ============ EXPORT / IMPORT ROADMAPS ============
+function exportRoadmap(roadmapId, format) {
+    const url = `/api/roadmaps/${roadmapId}/export?format=${format}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    // Need auth header for the request
+    fetch(url, { headers: { 'Authorization': 'Bearer ' + getAuthToken() } })
+        .then(r => r.blob())
+        .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            a.href = blobUrl;
+            a.download = `roadmap.${format}`;
+            a.click();
+            URL.revokeObjectURL(blobUrl);
+            showToast(`📥 Đã tải roadmap (${format.toUpperCase()})`);
+        })
+        .catch(e => showToast('❌ Lỗi export: ' + e.message));
+}
+
+function importRoadmap() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            const res = await fetch('/api/roadmaps/import', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            showToast('✅ Import roadmap thành công!');
+            loadMyChannels();
+        } catch (err) {
+            showToast('❌ Lỗi import: ' + err.message);
+        }
+    };
+    input.click();
+}
+
+// ============ CHANNEL → ROADMAP → AUTO-FILL ============
+let _generatorRoadmaps = [];
+
+async function loadChannelsForGenerator() {
+    const sel = document.getElementById('channelForGenerate');
+    if (!sel) return;
+    try {
+        const res = await fetch('/api/channels', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        const channels = await res.json();
+        // Keep existing selected value
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">-- Không chọn kênh --</option>' +
+            channels.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        if (prev) sel.value = prev;
+    } catch (e) { console.error('Channel load error:', e); }
+}
+
+async function onChannelForGenerateChange() {
+    const channelId = document.getElementById('channelForGenerate')?.value;
+    const taskSel = document.getElementById('roadmapTaskSelect');
+    if (!taskSel) return;
+
+    if (!channelId) {
+        taskSel.disabled = true;
+        taskSel.innerHTML = '<option value="">-- Chọn kênh trước --</option>';
+        _generatorRoadmaps = [];
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/channels/${channelId}/roadmaps`, {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) throw new Error('Failed');
+        const roadmaps = await res.json();
+        _generatorRoadmaps = roadmaps;
+
+        // Find today's date
+        const today = new Date().toISOString().substring(0, 10);
+
+        // Collect all pending videos across all roadmaps, prioritizing today
+        let tasks = [];
+        roadmaps.forEach(rm => {
+            rm.days?.forEach(d => {
+                d.videos?.forEach((v, vi) => {
+                    if (v.status !== 'published') {
+                        tasks.push({
+                            rmName: rm.roadmap_name,
+                            rmId: rm.id,
+                            day: d.day,
+                            date: d.date || '',
+                            slot: vi,
+                            title: v.title || `Video ${d.day}`,
+                            idea: v.idea || '',
+                            isToday: d.date === today,
+                            theme: d.theme || ''
+                        });
+                    }
+                });
+            });
+        });
+
+        // Sort: today first, then by day number
+        tasks.sort((a, b) => (b.isToday - a.isToday) || (a.day - b.day));
+
+        if (!tasks.length) {
+            taskSel.disabled = true;
+            taskSel.innerHTML = '<option value="">✅ Tất cả video đã hoàn thành!</option>';
+            return;
+        }
+
+        taskSel.disabled = false;
+        taskSel.innerHTML = '<option value="">-- Chọn video cần tạo --</option>' +
+            tasks.map((t, i) => {
+                const badge = t.isToday ? '🔴 HÔM NAY' : `Ngày ${t.day}`;
+                return `<option value="${i}" data-idx="${i}">${badge} — ${t.title}</option>`;
+            }).join('');
+
+        // Store tasks for later use
+        window._generatorTasks = tasks;
+
+        // Auto-select today's task if available
+        const todayTask = tasks.findIndex(t => t.isToday);
+        if (todayTask >= 0) {
+            taskSel.value = todayTask;
+            onRoadmapTaskSelect();
+        }
+    } catch (e) {
+        console.error('Roadmap load error:', e);
+        taskSel.disabled = true;
+        taskSel.innerHTML = '<option value="">Lỗi tải roadmap</option>';
+    }
+}
+
+function onRoadmapTaskSelect() {
+    const idx = document.getElementById('roadmapTaskSelect')?.value;
+    if (idx === '' || idx === null) return;
+    const task = window._generatorTasks?.[parseInt(idx)];
+    if (!task) return;
+
+    // Build description from roadmap task
+    let desc = `🎬 ${task.title}`;
+    if (task.idea) desc += `\n📋\n💡 ${task.idea}`;
+
+    document.getElementById('textDescription').value = desc;
+    showToast(`📋 Đã tải "${task.title}" từ roadmap`);
+}
+
+// Add export buttons to roadmap header
+function getExportButtons(roadmapId) {
+    return `
+        <button class="btn-ghost btn-sm" onclick="exportRoadmap('${roadmapId}','csv')" title="Export CSV">📥 CSV</button>
+        <button class="btn-ghost btn-sm" onclick="exportRoadmap('${roadmapId}','json')" title="Export JSON">📥 JSON</button>
+        <button class="btn-ghost btn-sm" onclick="importRoadmap()" title="Import Roadmap">📤 Import</button>
+    `;
 }
