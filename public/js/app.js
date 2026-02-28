@@ -2805,15 +2805,60 @@ async function showAdminUserDetail(userId) {
                 <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#f59e0b">${d.characters.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Nhân vật</div></div>
                 <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#3b82f6">${d.roadmaps.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Roadmaps</div></div>
             </div>
-            ${section('📺', 'Kênh', d.channels, c => card(c.name, `${c.niche || ''} • ${c.language} • ${c.postsPerDay} video/ngày`))}
+            ${section('📺', 'Kênh', d.channels, c => expandCard(c.name, `${c.niche || ''} • ${c.language} • ${c.postsPerDay} video/ngày`, `📺 Tên: ${c.name}\n📁 Niche: ${c.niche || 'N/A'}\n🌐 Ngôn ngữ: ${c.language || 'N/A'}\n📊 Video/ngày: ${c.postsPerDay || 'N/A'}\n📅 Tạo: ${fmtDate(c.createdAt)}`))}
             ${section('📂', 'Preset', d.presets, renderPreset)}
             ${section('🎭', 'Nhân vật', d.characters, renderChar)}
+            ${section('🗺️', 'Roadmaps', d.roadmaps, r => {
+            const days = r.days || {};
+            const dayCount = Object.keys(days).length;
+            const totalSlots = Object.values(days).reduce((sum, d) => sum + (Array.isArray(d) ? d.length : 0), 0);
+            let detail = `📅 Kênh: ${r.channelName || 'N/A'}\n📊 Ngày: ${dayCount} | Slots: ${totalSlots}\n📅 Tạo: ${fmtDate(r.createdAt)}`;
+            Object.entries(days).slice(0, 5).forEach(([day, slots]) => {
+                detail += `\n\n📅 ${day}:`;
+                (Array.isArray(slots) ? slots : []).forEach((s, i) => {
+                    detail += `\n  ${i + 1}. ${s.description || s.topic || 'Slot'} ${s.status === 'published' ? '✅' : '⏳'}`;
+                });
+            });
+            if (dayCount > 5) detail += `\n\n... và ${dayCount - 5} ngày nữa`;
+            return expandCard(`🗺️ ${r.channelName || 'Roadmap'}`, `${dayCount} ngày • ${totalSlots} slots • ${fmtDate(r.createdAt)}`, detail);
+        })}
             ${section('📝', 'Lịch sử tạo video', d.generationHistory, h => {
-            const detail = `📋 Dự án: ${h.projectName || h.description || 'N/A'}\n🎬 Clips: ${h.clipCount || 0} • ⏱ ${h.duration || 0}s\n📺 Kênh: ${h.channelName || 'N/A'}\n📂 Preset: ${h.presetName || 'N/A'}\n🎨 Style: ${h.templateStyle || 'N/A'}\n🌐 Ngôn ngữ: ${h.langFormat || 'N/A'}`;
+            let detail = `📋 Dự án: ${h.projectName || h.description || 'N/A'}\n🎬 Clips: ${h.clipCount || 0} • ⏱ ${h.duration || 0}s\n📺 Kênh: ${h.channelName || 'N/A'}\n📂 Preset: ${h.presetName || 'N/A'}\n🎨 Style: ${h.templateStyle || 'N/A'}\n🌐 Ngôn ngữ: ${h.langFormat || 'N/A'}`;
+            if (h.plan?.clips?.length) {
+                detail += '\n\n🎬 Danh sách clips:';
+                h.plan.clips.forEach((c, i) => { detail += `\n  ${i + 1}. ${c.image_prompt?.substring(0, 60) || c.description?.substring(0, 60) || 'Clip'}...`; });
+            }
             return expandCard(h.projectName || h.description?.substring(0, 40) || 'Video', `${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}`, detail);
         })}
-            ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, h => card(h.filename || h.projectName || 'Video', `${h.clipCount || 0} clips • ${fmtDate(h.createdAt)}`))}
-            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => card(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/100' : ''}`, fmtDate(h.createdAt)))}
+            ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, h => {
+            const isDNA = h.type === 'dna';
+            let detail = isDNA
+                ? `🧬 DNA: ${h.title || 'N/A'}\n⭐ Điểm: ${h.overallScore || 'N/A'}/100\n📅 ${fmtDate(h.createdAt)}`
+                : `📹 Video: ${h.filename || 'N/A'}\n🎬 Clips: ${h.clipCount || 0}\n📅 ${fmtDate(h.createdAt)}`;
+            if (isDNA && h.plan) {
+                const p = h.plan;
+                if (p.style_dna?.overall_style) detail += `\n🎨 Style: ${p.style_dna.overall_style}`;
+                if (p.characters?.length) detail += `\n🎭 Nhân vật: ${p.characters.map(c => c.name).join(', ')}`;
+                if (p.content_formula?.structure) detail += `\n📐 Cấu trúc: ${p.content_formula.structure}`;
+            } else if (h.plan?.clips?.length) {
+                detail += '\n\n🎬 Clips:';
+                h.plan.clips.slice(0, 5).forEach((c, i) => { detail += `\n  ${i + 1}. [${c.start_time || ''}] ${c.description?.substring(0, 60) || ''}`; });
+            }
+            const label = isDNA ? `🧬 ${h.title || h.filename || 'DNA'}` : `📹 ${h.filename || 'Video'}`;
+            const scoreTxt = h.overallScore ? ` ⭐${h.overallScore}/100` : '';
+            return expandCard(`${label}${scoreTxt}`, `${h.clipCount ? h.clipCount + ' clips • ' : ''}${fmtDate(h.createdAt)}`, detail);
+        })}
+            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => {
+            let detail = `📹 Video: ${h.filename || 'N/A'}\n⭐ Điểm: ${h.overallScore || 'N/A'}/100\n📅 ${fmtDate(h.createdAt)}`;
+            if (h.review) {
+                const r = h.review;
+                if (r.overall_score) detail += `\n\n📊 Điểm chi tiết:\n  Hook: ${r.hook_score || 'N/A'}/10\n  Visual: ${r.visual_score || 'N/A'}/10\n  Audio: ${r.audio_score || 'N/A'}/10\n  Pacing: ${r.pacing_score || 'N/A'}/10`;
+                if (r.strengths?.length) detail += `\n\n✅ Điểm mạnh:\n${r.strengths.map(s => '  • ' + s).join('\n')}`;
+                if (r.weaknesses?.length) detail += `\n\n⚠️ Điểm yếu:\n${r.weaknesses.map(w => '  • ' + w).join('\n')}`;
+                if (r.suggestions?.length) detail += `\n\n💡 Đề xuất:\n${r.suggestions.map(s => '  • ' + s).join('\n')}`;
+            }
+            return expandCard(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/100' : ''}`, fmtDate(h.createdAt), detail);
+        })}
         `;
 
         document.getElementById('channelDetailTitle').textContent = `👤 ${u.name || u.username}`;
