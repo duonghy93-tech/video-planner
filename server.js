@@ -1377,7 +1377,7 @@ function getUserChats(userId) {
 app.get('/api/chat/conversations', auth.authMiddleware, (req, res) => {
     const all = getUserChats(req.user.id);
     const convs = (all[req.user.id]?.convs || []).map(c => ({
-        id: c.id, title: c.title, messageCount: c.messages.length,
+        id: c.id, title: c.title, messageCount: c.messages.length, channelId: c.channelId || null,
         lastMessage: c.messages.length ? c.messages[c.messages.length - 1].time : c.createdAt
     }));
     res.json(convs);
@@ -1390,7 +1390,8 @@ app.post('/api/chat/conversations', auth.authMiddleware, (req, res) => {
         id: 'conv_' + Date.now().toString(36),
         title: req.body.title || 'New Chat',
         messages: [],
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ...(req.body.channelId ? { channelId: req.body.channelId } : {})
     };
     all[req.user.id].convs.unshift(conv);
     writeJsonFile(CHAT_HISTORY_FILE, all);
@@ -1447,13 +1448,31 @@ app.post('/api/chat', auth.authMiddleware, chatUpload.single('file'), async (req
         const channelIds = channels.map(c => c.id);
         const roadmaps = (readJsonFile(ROADMAPS_FILE) || []).filter(rm => channelIds.includes(rm.channelId));
 
+        // Build channel-specific context if this is a per-channel conversation
+        let channelContext = '';
+        if (conv.channelId) {
+            const ch = channels.find(c => c.id === conv.channelId);
+            if (ch) {
+                const chRoadmaps = roadmaps.filter(r => r.channelId === ch.id);
+                const totalVideos = chRoadmaps.reduce((s, r) => s + (r.days?.reduce((s2, d) => s2 + (d.videos?.length || 0), 0) || 0), 0);
+                const published = chRoadmaps.reduce((s, r) => s + (r.days?.reduce((s2, d) => s2 + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0), 0);
+                channelContext = `\n\n🎯 KÊNH ĐANG THẢO LUẬN: "${ch.name}"
+Danh mục: ${ch.category || 'N/A'} | Niche: ${ch.niche || 'N/A'} | Ngôn ngữ: ${ch.language || 'N/A'} | Đăng: ${ch.postsPerDay || '?'} video/ngày
+${ch.description ? `Mô tả: ${ch.description}` : ''}
+${ch.brief ? `Chiến lược: Đối tượng=${ch.brief.target_audience || '?'}, Tone=${ch.brief.tone || '?'}, Sản phẩm=${ch.brief.products || '?'}, Đối thủ=${ch.brief.competitors || '?'}` : ''}
+${ch.brief?.content_pillars?.length ? `Nội dung chính: ${ch.brief.content_pillars.join(', ')}` : ''}
+Roadmaps: ${chRoadmaps.length} | Video: ${published}/${totalVideos} đã đăng
+Hãy tập trung vào kênh "${ch.name}" trong cuộc hội thoại này. Mọi gợi ý và phân tích đều dành riêng cho kênh này.`;
+            }
+        }
+
         const systemPrompt = `Bạn là trợ lý AI chuyên nghiệp về chiến lược nội dung video ngắn (TikTok, YouTube Shorts, Facebook Reels).
 
 Ngày giờ hiện tại: ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
 
 Thông tin user: ${req.user.username}
 Kênh: ${channels.map(c => `"${c.name}" (${c.category})`).join(', ') || 'chưa có'}
-Roadmaps: ${roadmaps.length}
+Roadmaps: ${roadmaps.length}${channelContext}
 
 Khả năng của bạn:
 - Phân tích trend & niche market chi tiết

@@ -2734,6 +2734,9 @@ async function viewChannelDetail(id, isAdmin) {
                 </h4>
                 <div style="display:grid;gap:8px">${roadmapsHtml}</div>
             </div>
+            <div style="margin-top:16px">
+                <button onclick="openChannelChat('${ch.id}','${ch.name.replace(/'/g, "\\'")}','${ch.category || ''}','${ch.niche || ''}')" style="width:100%;padding:12px;background:linear-gradient(135deg,rgba(139,92,246,0.2),rgba(59,130,246,0.2));border:1px solid rgba(139,92,246,0.3);border-radius:10px;color:var(--text-primary);font-size:0.9rem;cursor:pointer;font-family:var(--font-sans);transition:all 0.2s" onmouseover="this.style.background='linear-gradient(135deg,rgba(139,92,246,0.3),rgba(59,130,246,0.3))'" onmouseout="this.style.background='linear-gradient(135deg,rgba(139,92,246,0.2),rgba(59,130,246,0.2))'">💬 Chat AI về kênh này</button>
+            </div>
         `;
         document.getElementById('channelDetailModal').classList.add('active');
     } catch (err) { showToast('❌ ' + err.message); }
@@ -3423,6 +3426,60 @@ function toggleChatSidebar() {
     const sb = document.getElementById('chatSidebar');
     if (!sb) return;
     sb.style.display = sb.style.display === 'none' ? 'block' : 'none';
+}
+
+// Open or create a per-channel conversation
+async function openChannelChat(channelId, channelName, category, niche) {
+    // Close channel detail modal
+    document.getElementById('channelDetailModal')?.classList.remove('active');
+
+    // Ensure chatbot is open
+    const panel = document.getElementById('chatbotPanel');
+    if (!panel) { initChatbot(); }
+    document.getElementById('chatbotPanel').style.display = 'flex';
+
+    // Check if channel conversation already exists
+    try {
+        const res = await fetch('/api/chat/conversations', { headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'x-api-key': getStoredApiKey() } });
+        const convs = await res.json();
+        const existing = convs.find(c => c.channelId === channelId);
+
+        if (existing) {
+            // Load existing channel conversation
+            _currentConvId = existing.id;
+            await loadConversation(existing.id);
+        } else {
+            // Create new channel conversation
+            const createRes = await fetch('/api/chat/conversations', {
+                method: 'POST',
+                headers: { ...getApiHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: `📺 ${channelName}`, channelId })
+            });
+            const newConv = await createRes.json();
+            _currentConvId = newConv.id;
+
+            // Show welcome message for channel
+            const container = document.getElementById('chatMessages');
+            if (container) {
+                container.innerHTML = `<div style="text-align:center;padding:30px 10px;color:var(--text-secondary)">
+                    <div style="font-size:2rem;margin-bottom:8px">📺</div>
+                    <div style="font-size:1rem;font-weight:600;color:var(--text-primary)">${channelName}</div>
+                    <div style="font-size:0.8rem;margin-top:4px">${category || ''} ${niche ? '• ' + niche : ''}</div>
+                    <div style="font-size:0.8rem;margin-top:12px">Chat AI riêng cho kênh này.<br>Hỏi về chiến lược, trend, content ideas...</div>
+                </div>`;
+            }
+
+            // Reload sidebar
+            loadChatConversations();
+        }
+
+        // Update header
+        const title = document.getElementById('chatConvTitle');
+        if (title) title.textContent = `📺 ${channelName}`;
+
+    } catch (e) {
+        showToast('❌ ' + e.message);
+    }
 }
 
 async function loadChatConversations() {
