@@ -3297,9 +3297,11 @@ async function scanMyChannels() {
     } catch (e) { showToast('❌ Lỗi: ' + e.message); }
 }
 
-// ============ FLOATING AI CHATBOT ============
+// ============ FLOATING AI CHATBOT (Multi-conversation) ============
+let _currentConvId = null;
+let _chatConvs = [];
+
 function initChatbot() {
-    // Create floating button
     const btn = document.createElement('div');
     btn.id = 'chatbotToggle';
     btn.innerHTML = '🤖';
@@ -3309,62 +3311,160 @@ function initChatbot() {
     btn.onclick = toggleChatbot;
     document.body.appendChild(btn);
 
-    // Create chat panel
     const panel = document.createElement('div');
     panel.id = 'chatbotPanel';
-    panel.style.cssText = 'position:fixed;bottom:86px;right:24px;width:360px;height:480px;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9998;display:none;flex-direction:column;overflow:hidden';
+    panel.style.cssText = 'position:fixed;bottom:86px;right:24px;width:420px;height:540px;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9998;display:none;flex-direction:column;overflow:hidden';
     panel.innerHTML = `
-        <div style="padding:14px 16px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);display:flex;justify-content:space-between;align-items:center">
-            <div>
-                <div style="font-weight:700;color:white;font-size:0.9rem">🤖 AI Content Advisor</div>
-                <div style="font-size:0.7rem;color:rgba(255,255,255,0.7)">Gợi ý kênh • Content • Roadmap</div>
+        <div style="padding:12px 16px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:1.1rem">🤖</span>
+                <div>
+                    <div style="font-weight:700;color:white;font-size:0.85rem">AI Content Advisor</div>
+                    <div style="font-size:0.65rem;color:rgba(255,255,255,0.7)" id="chatConvTitle">New Chat</div>
+                </div>
             </div>
-            <button onclick="toggleChatbot()" style="background:none;border:none;color:white;font-size:1.2rem;cursor:pointer">✕</button>
-        </div>
-        <div id="chatMessages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px">
-            <div style="background:rgba(139,92,246,0.15);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:85%">
-                Xin chào! 👋 Mình là trợ lý AI chuyên về video content. Bạn muốn:<br>
-                • 💡 Gợi ý ý tưởng kênh mới<br>
-                • 📝 Tạo content ideas<br>
-                • 📊 Phân tích kênh hiện tại<br>
-                • 🗓️ Lên kế hoạch content
+            <div style="display:flex;gap:6px">
+                <button onclick="toggleChatSidebar()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.75rem" title="Conversations">💬</button>
+                <button onclick="newChatConversation()" style="background:rgba(255,255,255,0.2);border:none;color:white;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.75rem" title="New Chat">➕</button>
+                <button onclick="toggleChatbot()" style="background:none;border:none;color:white;font-size:1rem;cursor:pointer">✕</button>
             </div>
         </div>
-        <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px">
-            <input type="text" id="chatInput" placeholder="Hỏi gì đó..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-primary);font-size:0.85rem;font-family:var(--font-sans)" onkeypress="if(event.key==='Enter')sendChat()">
-            <button onclick="sendChat()" style="padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">Gửi</button>
+        <div style="flex:1;display:flex;overflow:hidden;position:relative">
+            <!-- Sidebar -->
+            <div id="chatSidebar" style="display:none;width:180px;border-right:1px solid var(--border);overflow-y:auto;background:rgba(0,0,0,0.15);flex-shrink:0">
+                <div style="padding:8px">
+                    <button onclick="newChatConversation()" style="width:100%;padding:8px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.78rem;font-weight:600">➕ New Chat</button>
+                </div>
+                <div id="chatConvList" style="padding:0 6px 6px"></div>
+            </div>
+            <!-- Messages -->
+            <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+                <div id="chatMessages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px">
+                    <div style="text-align:center;padding:40px 16px;color:var(--text-secondary)">
+                        <div style="font-size:2rem;margin-bottom:8px">🤖</div>
+                        <div style="font-size:0.85rem;font-weight:600">AI Content Advisor</div>
+                        <div style="font-size:0.75rem;margin-top:4px">Hỏi bất kỳ điều gì về content video!</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px">
+                            <button onclick="quickChat('Gợi ý 10 ý tưởng video viral cho kênh của tôi')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">💡 Ý tưởng viral</button>
+                            <button onclick="quickChat('Phân tích trend TikTok tuần này')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">📊 Trend TikTok</button>
+                            <button onclick="quickChat('Viết script video 60s cho kênh food')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">📝 Viết script</button>
+                            <button onclick="quickChat('SEO tips cho YouTube Shorts')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">🔍 SEO tips</button>
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px">
+                    <input type="text" id="chatInput" placeholder="Hỏi gì đó..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-primary);font-size:0.85rem;font-family:var(--font-sans)" onkeypress="if(event.key==='Enter')sendChat()">
+                    <button onclick="sendChat()" style="padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">Gửi</button>
+                </div>
+            </div>
         </div>
     `;
     document.body.appendChild(panel);
-
-    // Load chat history
-    loadChatHistory();
+    loadChatConversations();
 }
 
 function toggleChatbot() {
     const panel = document.getElementById('chatbotPanel');
     if (!panel) return;
-    if (panel.style.display === 'none' || panel.style.display === '') {
-        panel.style.display = 'flex';
-        document.getElementById('chatInput')?.focus();
-    } else {
-        panel.style.display = 'none';
-    }
+    const visible = panel.style.display === 'flex';
+    panel.style.display = visible ? 'none' : 'flex';
+    if (!visible) document.getElementById('chatInput')?.focus();
 }
 
-async function loadChatHistory() {
-    try {
-        const res = await fetch('/api/chat/history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
-        if (!res.ok) return;
-        const messages = await res.json();
-        const container = document.getElementById('chatMessages');
-        if (!container || !messages.length) return;
+function toggleChatSidebar() {
+    const sb = document.getElementById('chatSidebar');
+    if (!sb) return;
+    sb.style.display = sb.style.display === 'none' ? 'block' : 'none';
+}
 
-        // Keep welcome message, add history
-        messages.forEach(m => {
-            appendChatMessage(m.role === 'user' ? 'user' : 'ai', m.content);
-        });
+async function loadChatConversations() {
+    try {
+        const res = await fetch('/api/chat/conversations', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        _chatConvs = await res.json();
+        renderConvList();
     } catch (e) { /* ignore */ }
+}
+
+function renderConvList() {
+    const list = document.getElementById('chatConvList');
+    if (!list) return;
+    if (!_chatConvs.length) {
+        list.innerHTML = '<p style="color:var(--text-secondary);font-size:0.72rem;padding:8px;text-align:center">Chưa có cuộc hội thoại</p>';
+        return;
+    }
+    list.innerHTML = _chatConvs.map(c => `
+        <div onclick="loadConversation('${c.id}')" style="padding:8px 10px;margin-bottom:4px;border-radius:8px;cursor:pointer;font-size:0.75rem;background:${c.id === _currentConvId ? 'rgba(139,92,246,0.2)' : 'transparent'};border:1px solid ${c.id === _currentConvId ? 'rgba(139,92,246,0.4)' : 'transparent'};transition:all 0.2s" onmouseover="this.style.background='rgba(139,92,246,0.1)'" onmouseout="this.style.background='${c.id === _currentConvId ? 'rgba(139,92,246,0.2)' : 'transparent'}'">
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)">${c.title || 'New Chat'}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+                <span style="font-size:0.65rem;color:var(--text-secondary)">${c.messageCount} tin</span>
+                <button onclick="event.stopPropagation();deleteConversation('${c.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.65rem;opacity:0.5;padding:0" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">🗑</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadConversation(convId) {
+    _currentConvId = convId;
+    renderConvList();
+    try {
+        const res = await fetch(`/api/chat/conversations/${convId}`, { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        const conv = await res.json();
+        document.getElementById('chatConvTitle').textContent = conv.title || 'Chat';
+        const container = document.getElementById('chatMessages');
+        if (!container) return;
+        container.innerHTML = '';
+        conv.messages.forEach(m => appendChatMessage(m.role === 'user' ? 'user' : 'ai', m.content));
+        if (!conv.messages.length) showChatWelcome();
+    } catch (e) { console.error('Load conv error:', e); }
+}
+
+async function newChatConversation() {
+    try {
+        const res = await fetch('/api/chat/conversations', {
+            method: 'POST', headers: getApiHeaders(),
+            body: JSON.stringify({ title: 'New Chat' })
+        });
+        const conv = await res.json();
+        _currentConvId = conv.id;
+        _chatConvs.unshift({ id: conv.id, title: conv.title, messageCount: 0 });
+        renderConvList();
+        document.getElementById('chatConvTitle').textContent = 'New Chat';
+        showChatWelcome();
+        document.getElementById('chatInput')?.focus();
+    } catch (e) { showToast('❌ Lỗi tạo chat'); }
+}
+
+async function deleteConversation(convId) {
+    try {
+        await fetch(`/api/chat/conversations/${convId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        _chatConvs = _chatConvs.filter(c => c.id !== convId);
+        if (_currentConvId === convId) { _currentConvId = null; showChatWelcome(); }
+        renderConvList();
+    } catch (e) { /* ignore */ }
+}
+
+function showChatWelcome() {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    container.innerHTML = `
+        <div style="text-align:center;padding:40px 16px;color:var(--text-secondary)">
+            <div style="font-size:2rem;margin-bottom:8px">🤖</div>
+            <div style="font-size:0.85rem;font-weight:600">AI Content Advisor</div>
+            <div style="font-size:0.75rem;margin-top:4px">Hỏi bất kỳ điều gì về content video!</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px">
+                <button onclick="quickChat('Gợi ý 10 ý tưởng video viral')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">💡 Ý tưởng viral</button>
+                <button onclick="quickChat('Phân tích trend TikTok')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">📊 Trend</button>
+                <button onclick="quickChat('Viết script video 60s')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">📝 Script</button>
+                <button onclick="quickChat('SEO tips cho Shorts')" style="padding:6px 10px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;color:#a78bfa;cursor:pointer;font-size:0.72rem">🔍 SEO</button>
+            </div>
+        </div>`;
+}
+
+function quickChat(msg) {
+    document.getElementById('chatInput').value = msg;
+    sendChat();
 }
 
 async function sendChat() {
@@ -3373,26 +3473,35 @@ async function sendChat() {
     if (!msg) return;
     input.value = '';
 
+    // Clear welcome screen on first message
+    const container = document.getElementById('chatMessages');
+    if (container && !_currentConvId) container.innerHTML = '';
+
     appendChatMessage('user', msg);
 
-    // Show typing indicator
     const typing = document.createElement('div');
     typing.id = 'chatTyping';
     typing.style.cssText = 'background:rgba(139,92,246,0.15);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:85%;color:var(--text-secondary)';
     typing.textContent = '⏳ Đang suy nghĩ...';
-    document.getElementById('chatMessages')?.appendChild(typing);
+    container?.appendChild(typing);
     scrollChatToBottom();
 
     try {
         const res = await fetch('/api/chat', {
-            method: 'POST',
-            headers: getApiHeaders(),
-            body: JSON.stringify({ message: msg })
+            method: 'POST', headers: getApiHeaders(),
+            body: JSON.stringify({ message: msg, convId: _currentConvId || undefined })
         });
         const data = await res.json();
         typing.remove();
         if (data.reply) {
             appendChatMessage('ai', data.reply);
+            // Update conversation tracking
+            if (data.convId && !_currentConvId) {
+                _currentConvId = data.convId;
+                _chatConvs.unshift({ id: data.convId, title: data.convTitle, messageCount: 2 });
+                renderConvList();
+            }
+            if (data.convTitle) document.getElementById('chatConvTitle').textContent = data.convTitle;
         } else {
             appendChatMessage('ai', '❌ ' + (data.error || 'Lỗi'));
         }
@@ -3407,12 +3516,24 @@ function appendChatMessage(role, content) {
     if (!container) return;
     const div = document.createElement('div');
     if (role === 'user') {
-        div.style.cssText = 'background:linear-gradient(135deg,#8b5cf6,#3b82f6);padding:10px 12px;border-radius:12px;border-top-right-radius:4px;font-size:0.82rem;max-width:85%;align-self:flex-end;color:white';
+        div.style.cssText = 'background:linear-gradient(135deg,#8b5cf6,#3b82f6);padding:10px 12px;border-radius:12px;border-top-right-radius:4px;font-size:0.82rem;max-width:85%;align-self:flex-end;color:white;word-break:break-word';
+        div.innerHTML = content.replace(/\n/g, '<br>');
     } else {
-        div.style.cssText = 'background:rgba(139,92,246,0.15);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:85%;color:var(--text-primary)';
+        div.style.cssText = 'background:rgba(139,92,246,0.12);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:88%;color:var(--text-primary);word-break:break-word;line-height:1.5';
+        // Better markdown rendering
+        let html = content
+            .replace(/```([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;overflow-x:auto;font-size:0.75rem;margin:4px 0">$1</pre>')
+            .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.3);padding:1px 4px;border-radius:3px;font-size:0.78rem">$1</code>')
+            .replace(/### (.*)/g, '<div style="font-weight:700;font-size:0.88rem;margin:6px 0 2px">$1</div>')
+            .replace(/## (.*)/g, '<div style="font-weight:700;font-size:0.92rem;margin:8px 0 3px">$1</div>')
+            .replace(/# (.*)/g, '<div style="font-weight:800;font-size:0.95rem;margin:8px 0 4px">$1</div>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/^\d+\.\s/gm, (m) => `<span style="color:#8b5cf6;font-weight:600">${m}</span>`)
+            .replace(/^[-•]\s/gm, '<span style="color:#8b5cf6">• </span>')
+            .replace(/\n/g, '<br>');
+        div.innerHTML = html;
     }
-    // Simple markdown: bold, line breaks
-    div.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
     container.appendChild(div);
     scrollChatToBottom();
 }
@@ -3422,5 +3543,4 @@ function scrollChatToBottom() {
     if (c) setTimeout(() => c.scrollTop = c.scrollHeight, 50);
 }
 
-// Init chatbot on page load
 document.addEventListener('DOMContentLoaded', () => { setTimeout(initChatbot, 500); });

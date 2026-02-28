@@ -1357,73 +1357,151 @@ app.post('/api/user/scan-channels', auth.authMiddleware, async (req, res) => {
     res.json({ success: true, scanned, errors });
 });
 
-// ============ AI CHATBOT ============
+// ============ AI CHATBOT (Multi-conversation) ============
 const CHAT_HISTORY_FILE = path.join(dataDir, 'chat_history.json');
 
+function getUserChats(userId) {
+    const all = readJsonFile(CHAT_HISTORY_FILE) || {};
+    if (!all[userId]) all[userId] = { convs: [] };
+    // Migrate old flat array format to new format
+    if (Array.isArray(all[userId])) {
+        const oldMessages = all[userId];
+        all[userId] = { convs: oldMessages.length ? [{ id: 'conv_migrated', title: 'Chat cũ', messages: oldMessages, createdAt: oldMessages[0]?.time || new Date().toISOString() }] : [] };
+        writeJsonFile(CHAT_HISTORY_FILE, all);
+    }
+    return all;
+}
+
+// List conversations
+app.get('/api/chat/conversations', auth.authMiddleware, (req, res) => {
+    const all = getUserChats(req.user.id);
+    const convs = (all[req.user.id]?.convs || []).map(c => ({
+        id: c.id, title: c.title, messageCount: c.messages.length,
+        lastMessage: c.messages.length ? c.messages[c.messages.length - 1].time : c.createdAt
+    }));
+    res.json(convs);
+});
+
+// Create new conversation
+app.post('/api/chat/conversations', auth.authMiddleware, (req, res) => {
+    const all = getUserChats(req.user.id);
+    const conv = {
+        id: 'conv_' + Date.now().toString(36),
+        title: req.body.title || 'New Chat',
+        messages: [],
+        createdAt: new Date().toISOString()
+    };
+    all[req.user.id].convs.unshift(conv);
+    writeJsonFile(CHAT_HISTORY_FILE, all);
+    res.json(conv);
+});
+
+// Delete conversation
+app.delete('/api/chat/conversations/:convId', auth.authMiddleware, (req, res) => {
+    const all = getUserChats(req.user.id);
+    all[req.user.id].convs = all[req.user.id].convs.filter(c => c.id !== req.params.convId);
+    writeJsonFile(CHAT_HISTORY_FILE, all);
+    res.json({ success: true });
+});
+
+// Get conversation messages
+app.get('/api/chat/conversations/:convId', auth.authMiddleware, (req, res) => {
+    const all = getUserChats(req.user.id);
+    const conv = all[req.user.id].convs.find(c => c.id === req.params.convId);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    res.json(conv);
+});
+
+// Send message to a conversation
 app.post('/api/chat', auth.authMiddleware, async (req, res) => {
     try {
-        const { message } = req.body;
+        const { message, convId } = req.body;
         if (!message) return res.status(400).json({ error: 'Message required' });
 
-        // Load user's channels and roadmaps for context
+        const all = getUserChats(req.user.id);
+        let conv;
+
+        if (convId) {
+            conv = all[req.user.id].convs.find(c => c.id === convId);
+        }
+        if (!conv) {
+            // Auto-create conversation
+            conv = { id: 'conv_' + Date.now().toString(36), title: message.substring(0, 40), messages: [], createdAt: new Date().toISOString() };
+            all[req.user.id].convs.unshift(conv);
+        }
+
+        // Load user context
         const channels = (readJsonFile(CHANNELS_FILE) || []).filter(c => c.userId === req.user.id);
         const channelIds = channels.map(c => c.id);
         const roadmaps = (readJsonFile(ROADMAPS_FILE) || []).filter(rm => channelIds.includes(rm.channelId));
 
-        // Load chat history
-        let chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
-        if (!chatHistory[req.user.id]) chatHistory[req.user.id] = [];
+        const systemPrompt = `Bạn là trợ lý AI chuyên nghiệp về chiến lược nội dung video ngắn (TikTok, YouTube Shorts, Facebook Reels).
 
-        const userHistory = chatHistory[req.user.id].slice(-10); // Last 10 messages for context
+Thông tin user: ${req.user.username}
+Kênh: ${channels.map(c => `"${c.name}" (${c.category})`).join(', ') || 'chưa có'}
+Roadmaps: ${roadmaps.length}
 
-        const systemPrompt = `Bạn là trợ lý AI chuyên về chiến lược nội dung video ngắn (TikTok, YouTube Shorts, Facebook Reels).
+Khả năng của bạn:
+- Phân tích trend & niche market chi tiết
+- Lên chiến lược content dài hạn (30-90 ngày)
+- Viết script/kịch bản video hoàn chỉnh
+- SEO video: tiêu đề, mô tả, hashtag, thumbnail ideas
+- Gợi ý ý tưởng kênh mới với phân tích cạnh tranh
+- Content calendar & posting schedule
+- Hook/intro hấp dẫn cho video
+- Phân tích đối thủ
+- Tính toán ROI content
+- Tips viral: retention, CTR, engagement
 
-Thông tin user hiện tại:
-- Tên: ${req.user.username}
-- Số kênh: ${channels.length} kênh: ${channels.map(c => `"${c.name}" (${c.category})`).join(', ') || 'chưa có'}
-- Số roadmaps: ${roadmaps.length}
+Trả lời chi tiết, có cấu trúc rõ ràng (dùng heading, bullet, numbered list). Dùng emoji. Ưu tiên tiếng Việt.`;
 
-Bạn có thể giúp user:
-1. Gợi ý ý tưởng kênh mới (niche, tên, chiến lược)
-2. Gợi ý nội dung video viral
-3. Phân tích kênh hiện tại và đề xuất cải thiện
-4. Tạo kế hoạch content calendar
-5. Tư vấn SEO cho video
-6. Phân tích trend
-7. Gợi ý preset/style phù hợp
-
-Trả lời ngắn gọn, thực tế, dùng emoji. Ưu tiên tiếng Việt nếu user nói tiếng Việt.`;
-
-        const conversationContext = userHistory.map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n');
-
-        const fullPrompt = `${systemPrompt}\n\nLịch sử:\n${conversationContext}\n\nUser: ${message}\n\nAI:`;
+        // Build conversation history for Gemini
+        const historyMessages = conv.messages.slice(-20).map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.content }]
+        }));
 
         const { GoogleGenerativeAI } = require('@google/generative-ai');
         const apiKey = process.env.GEMINI_API_KEY || global.__runtimeApiKey;
         if (!apiKey) return res.status(400).json({ error: 'Chưa cấu hình API Key' });
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const result = await model.generateContent(fullPrompt);
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-2.0-flash',
+            systemInstruction: systemPrompt
+        });
+
+        const chat = model.startChat({ history: historyMessages });
+        const result = await chat.sendMessage(message);
         const reply = result.response.text();
 
-        // Save to history
-        chatHistory[req.user.id].push({ role: 'user', content: message, time: new Date().toISOString() });
-        chatHistory[req.user.id].push({ role: 'ai', content: reply, time: new Date().toISOString() });
-        // Keep only last 100 messages per user
-        if (chatHistory[req.user.id].length > 100) chatHistory[req.user.id] = chatHistory[req.user.id].slice(-100);
-        writeJsonFile(CHAT_HISTORY_FILE, chatHistory);
+        // Save messages
+        conv.messages.push({ role: 'user', content: message, time: new Date().toISOString() });
+        conv.messages.push({ role: 'ai', content: reply, time: new Date().toISOString() });
 
-        res.json({ reply });
+        // Auto-title from first message
+        if (conv.messages.length === 2) {
+            conv.title = message.substring(0, 50);
+        }
+
+        // Keep max 200 messages per conversation
+        if (conv.messages.length > 200) conv.messages = conv.messages.slice(-200);
+        writeJsonFile(CHAT_HISTORY_FILE, all);
+
+        res.json({ reply, convId: conv.id, convTitle: conv.title });
     } catch (e) {
         console.error('Chat error:', e);
         res.status(500).json({ error: e.message });
     }
 });
 
+// Legacy endpoint for compatibility
 app.get('/api/chat/history', auth.authMiddleware, (req, res) => {
-    const chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
-    res.json(chatHistory[req.user.id] || []);
+    const all = getUserChats(req.user.id);
+    // Return all messages from all conversations flattened
+    const allMessages = [];
+    (all[req.user.id]?.convs || []).forEach(c => allMessages.push(...c.messages));
+    res.json(allMessages);
 });
 
 // Admin: view all users' chat logs
@@ -1432,14 +1510,18 @@ app.get('/api/admin/chat-logs', auth.authMiddleware, (req, res) => {
     const chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
     const users = readJsonFile(USERS_FILE) || [];
 
-    const logs = Object.entries(chatHistory).map(([userId, messages]) => {
+    const logs = Object.entries(chatHistory).map(([userId, data]) => {
         const user = users.find(u => u.id === userId);
+        const convs = data?.convs || (Array.isArray(data) ? [{ messages: data }] : []);
+        const allMessages = convs.flatMap(c => c.messages || []);
         return {
             userId,
             username: user?.username || 'Unknown',
-            messageCount: messages.length,
-            lastMessage: messages.length ? messages[messages.length - 1].time : null,
-            messages
+            conversationCount: convs.length,
+            messageCount: allMessages.length,
+            lastMessage: allMessages.length ? allMessages[allMessages.length - 1].time : null,
+            conversations: convs.map(c => ({ id: c.id, title: c.title, messageCount: (c.messages || []).length })),
+            messages: allMessages
         };
     }).sort((a, b) => (b.lastMessage || '').localeCompare(a.lastMessage || ''));
 
