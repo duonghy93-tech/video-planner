@@ -838,7 +838,7 @@ app.post('/api/config', (req, res) => {
 });
 
 // POST /api/analyze-video — Analyze uploaded video
-app.post('/api/analyze-video', upload.single('video'), async (req, res) => {
+app.post('/api/analyze-video', auth.authMiddleware, upload.single('video'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No video file uploaded' });
@@ -1766,7 +1766,7 @@ app.post('/api/generate-all', async (req, res) => {
 });
 
 // POST /api/review-video
-app.post('/api/review-video', upload.single('video'), async (req, res) => {
+app.post('/api/review-video', auth.authMiddleware, upload.single('video'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No video file uploaded' });
@@ -1804,14 +1804,14 @@ app.post('/api/review-video', upload.single('video'), async (req, res) => {
 });
 
 // ============ ANALYSIS & REVIEW HISTORY ============
-app.get('/api/analysis-history', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+app.get('/api/analysis-history', auth.authMiddleware, (req, res) => {
     const userId = req.user?.id || 'anonymous';
     let hist = readJsonFile(ANALYSIS_HISTORY_FILE);
     if (Array.isArray(hist) || !hist) hist = {};
     res.json(hist[userId] || []);
 });
 
-app.delete('/api/analysis-history/:id', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+app.delete('/api/analysis-history/:id', auth.authMiddleware, (req, res) => {
     const userId = req.user?.id || 'anonymous';
     let hist = readJsonFile(ANALYSIS_HISTORY_FILE);
     if (Array.isArray(hist) || !hist) hist = {};
@@ -1819,14 +1819,14 @@ app.delete('/api/analysis-history/:id', auth.optionalAuth || ((req, res, next) =
     res.json({ success: true });
 });
 
-app.get('/api/review-history', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+app.get('/api/review-history', auth.authMiddleware, (req, res) => {
     const userId = req.user?.id || 'anonymous';
     let hist = readJsonFile(REVIEW_HISTORY_FILE);
     if (Array.isArray(hist) || !hist) hist = {};
     res.json(hist[userId] || []);
 });
 
-app.delete('/api/review-history/:id', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+app.delete('/api/review-history/:id', auth.authMiddleware, (req, res) => {
     const userId = req.user?.id || 'anonymous';
     let hist = readJsonFile(REVIEW_HISTORY_FILE);
     if (Array.isArray(hist) || !hist) hist = {};
@@ -1846,7 +1846,7 @@ app.get('/api/presets', auth.optionalAuth, (req, res) => {
 });
 
 // POST /api/presets — Save a new preset
-app.post('/api/presets', (req, res) => {
+app.post('/api/presets', auth.authMiddleware, (req, res) => {
     try {
         const { name, data } = req.body;
         if (!name || !data) {
@@ -1874,7 +1874,7 @@ app.post('/api/presets', (req, res) => {
 });
 
 // DELETE /api/presets/:id — Delete a preset
-app.delete('/api/presets/:id', (req, res) => {
+app.delete('/api/presets/:id', auth.authMiddleware, (req, res) => {
     try {
         let presets = readJsonFile(PRESETS_FILE);
         const before = presets.length;
