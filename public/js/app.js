@@ -2219,12 +2219,13 @@ async function loadAdminDashboard() {
                 if (!roadmaps.length) {
                     rmListEl.innerHTML = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 roadmap n\u00e0o</p>';
                 } else {
-                    rmListEl.innerHTML = roadmaps.map(r => {
+                    window._adminRoadmaps = roadmaps;
+                    rmListEl.innerHTML = roadmaps.map((r, idx) => {
                         const totalVideos = r.days?.reduce((sum, d) => sum + (d.videos?.length || 0), 0) || 0;
                         const published = r.days?.reduce((sum, d) => sum + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
                         const pct = totalVideos > 0 ? Math.round(published / totalVideos * 100) : 0;
                         return `
-                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="adminViewRoadmap(this)" data-rm='${JSON.stringify(r).replace(/'/g, "\\'")}' data-channel-id="${r.channelId}">
+                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="adminViewRoadmap(${idx})">
                             <div style="display:flex;justify-content:space-between;align-items:center">
                                 <div>
                                     <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
@@ -2248,11 +2249,11 @@ async function loadAdminDashboard() {
     }
 }
 
-function adminViewRoadmap(el) {
+function adminViewRoadmap(idx) {
     try {
-        const rm = JSON.parse(el.dataset.rm);
-        const channelId = el.dataset.channelId;
-        currentRoadmapChannelId = channelId;
+        const rm = window._adminRoadmaps?.[idx];
+        if (!rm) throw new Error('Roadmap not found');
+        currentRoadmapChannelId = rm.channelId;
         currentRoadmap = rm;
         switchTab('channels');
         setTimeout(() => renderRoadmap(), 200);
