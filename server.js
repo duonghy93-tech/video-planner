@@ -897,6 +897,7 @@ app.post('/api/analyze-video', auth.authMiddleware, upload.single('video'), asyn
             clipCount: plan.clips?.length || 0,
             projectName: plan.project_name || projectName,
             langFormat,
+            plan: plan,
             createdAt: new Date().toISOString()
         });
         if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
@@ -1822,6 +1823,7 @@ app.post('/api/review-video', auth.authMiddleware, upload.single('video'), async
             fileSize: req.file.size,
             overallScore: review.overall_score || review.overallScore || null,
             summary: (review.summary || review.overall_assessment || '').substring(0, 200),
+            review: review,
             createdAt: new Date().toISOString()
         });
         if (rHist[userId].length > 30) rHist[userId] = rHist[userId].slice(0, 30);

@@ -411,23 +411,35 @@ async function loadAnalysisHistory() {
     try {
         const res = await fetch('/api/analysis-history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
         const items = await res.json();
+        window._analysisHistoryItems = items;
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center;padding:8px">Chưa có lịch sử phân tích</p>';
             return;
         }
-        container.innerHTML = items.map(h => {
+        container.innerHTML = items.map((h, idx) => {
             const date = new Date(h.createdAt);
             const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             const size = h.fileSize ? (h.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '';
-            return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+            const hasData = h.plan ? 'cursor:pointer' : '';
+            return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;${hasData};transition:all 0.2s" ${h.plan ? `onclick="viewAnalysisHistoryItem(${idx})" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'"` : ''}>
                 <div>
-                    <div style="font-size:0.8rem;color:var(--text-primary)">📹 ${h.filename || h.projectName || 'Video'}</div>
+                    <div style="font-size:0.8rem;color:var(--text-primary)">📹 ${h.filename || h.projectName || 'Video'} ${h.plan ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
                     <div style="font-size:0.65rem;color:var(--text-secondary)">${h.clipCount || 0} clips • ${size} • ${timeStr}</div>
                 </div>
-                <button onclick="deleteAnalysisHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
+                <button onclick="event.stopPropagation();deleteAnalysisHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
             </div>`;
         }).join('');
     } catch (e) { container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Lỗi tải lịch sử</p>'; }
+}
+
+function viewAnalysisHistoryItem(idx) {
+    const items = window._analysisHistoryItems;
+    if (!items || !items[idx] || !items[idx].plan) { showToast('⚠️ Không có dữ liệu phân tích'); return; }
+    currentPlan = items[idx].plan;
+    renderPlan(currentPlan, 'videoResults');
+    const resultsEl = document.getElementById('videoResults');
+    if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('📋 Đang hiển thị: ' + (items[idx].filename || items[idx].projectName || 'Video'));
 }
 
 async function deleteAnalysisHistoryItem(id) {
@@ -445,25 +457,37 @@ async function loadReviewHistory() {
     try {
         const res = await fetch('/api/review-history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
         const items = await res.json();
+        window._reviewHistoryItems = items;
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center;padding:8px">Chưa có lịch sử đánh giá</p>';
             return;
         }
-        container.innerHTML = items.map(h => {
+        container.innerHTML = items.map((h, idx) => {
             const date = new Date(h.createdAt);
             const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             const size = h.fileSize ? (h.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '';
-            const score = h.overallScore ? `⭐ ${h.overallScore}/10` : '';
-            return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+            const score = h.overallScore ? `⭐ ${h.overallScore}/100` : '';
+            const hasData = h.review ? 'cursor:pointer' : '';
+            return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;${hasData};transition:all 0.2s" ${h.review ? `onclick="viewReviewHistoryItem(${idx})" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'"` : ''}>
                 <div>
-                    <div style="font-size:0.8rem;color:var(--text-primary)">⭐ ${h.filename || 'Video'} ${score}</div>
+                    <div style="font-size:0.8rem;color:var(--text-primary)">⭐ ${h.filename || 'Video'} ${score} ${h.review ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
                     <div style="font-size:0.65rem;color:var(--text-secondary)">${size} • ${timeStr}</div>
                     ${h.summary ? `<div style="font-size:0.65rem;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px">${h.summary}</div>` : ''}
                 </div>
-                <button onclick="deleteReviewHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
+                <button onclick="event.stopPropagation();deleteReviewHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
             </div>`;
         }).join('');
     } catch (e) { container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Lỗi tải lịch sử</p>'; }
+}
+
+function viewReviewHistoryItem(idx) {
+    const items = window._reviewHistoryItems;
+    if (!items || !items[idx] || !items[idx].review) { showToast('⚠️ Không có dữ liệu đánh giá'); return; }
+    currentReview = items[idx].review;
+    renderReview(currentReview, 'reviewResultsSection');
+    const resultsEl = document.getElementById('reviewResultsSection');
+    if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('📋 Đang hiển thị: ' + (items[idx].filename || 'Video'));
 }
 
 async function deleteReviewHistoryItem(id) {
@@ -3361,6 +3385,51 @@ async function loadProfile() {
             }
         }
     } catch (e) { console.error('Profile load error:', e); }
+
+    // Load analysis history in profile
+    try {
+        const ahRes = await fetch('/api/analysis-history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (ahRes.ok) {
+            const items = await ahRes.json();
+            window._profileAnalysisItems = items;
+            const el = document.getElementById('profileAnalysisHistoryList');
+            if (el) {
+                if (!items.length) { el.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem">Chưa có lịch sử phân tích</p>'; }
+                else {
+                    el.innerHTML = items.map((h, idx) => {
+                        const d = new Date(h.createdAt);
+                        return `<div class="dna-card" style="padding:10px;margin-bottom:6px;${h.plan ? 'cursor:pointer' : ''};transition:all 0.2s" ${h.plan ? `onclick="switchTab('video');setTimeout(()=>{window._analysisHistoryItems=window._profileAnalysisItems;viewAnalysisHistoryItem(${idx})},300)" onmouseover="this.style.borderColor='rgba(139,92,246,0.5)'" onmouseout="this.style.borderColor='var(--border)'"` : ''}>
+                        <div style="font-size:0.85rem;font-weight:600">🔬 ${h.filename || h.projectName || 'Video'} ${h.plan ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Xem</span>' : ''}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary)">${h.clipCount || 0} clips • ${d.toLocaleDateString('vi-VN')}</div>
+                    </div>`;
+                    }).join('');
+                }
+            }
+        }
+    } catch (e) { }
+
+    // Load review history in profile
+    try {
+        const rvRes = await fetch('/api/review-history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (rvRes.ok) {
+            const items = await rvRes.json();
+            window._profileReviewItems = items;
+            const el = document.getElementById('profileReviewHistoryList');
+            if (el) {
+                if (!items.length) { el.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem">Chưa có lịch sử đánh giá</p>'; }
+                else {
+                    el.innerHTML = items.map((h, idx) => {
+                        const d = new Date(h.createdAt);
+                        const score = h.overallScore ? `⭐${h.overallScore}/100` : '';
+                        return `<div class="dna-card" style="padding:10px;margin-bottom:6px;${h.review ? 'cursor:pointer' : ''};transition:all 0.2s" ${h.review ? `onclick="switchTab('review');setTimeout(()=>{window._reviewHistoryItems=window._profileReviewItems;viewReviewHistoryItem(${idx})},300)" onmouseover="this.style.borderColor='rgba(139,92,246,0.5)'" onmouseout="this.style.borderColor='var(--border)'"` : ''}>
+                        <div style="font-size:0.85rem;font-weight:600">⭐ ${h.filename || 'Video'} ${score} ${h.review ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Xem</span>' : ''}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary)">${d.toLocaleDateString('vi-VN')}</div>
+                    </div>`;
+                    }).join('');
+                }
+            }
+        }
+    } catch (e) { }
 }
 
 async function updateProfile() {
