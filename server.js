@@ -1610,10 +1610,13 @@ app.post('/api/review-video', upload.single('video'), async (req, res) => {
 
 // ============ PRESET & CHARACTER CRUD ============
 
-// GET /api/presets — List all presets
-app.get('/api/presets', (req, res) => {
+// GET /api/presets — List user's presets
+app.get('/api/presets', auth.optionalAuth, (req, res) => {
     const presets = readJsonFile(PRESETS_FILE);
-    res.json({ success: true, presets });
+    const userId = req.user?.id;
+    // Users see only their own presets; admin sees all
+    const filtered = (req.user?.role === 'admin') ? presets : presets.filter(p => p.userId === userId || !p.userId);
+    res.json({ success: true, presets: filtered });
 });
 
 // POST /api/presets — Save a new preset
@@ -1628,6 +1631,8 @@ app.post('/api/presets', (req, res) => {
         const preset = {
             id: 'preset_' + Date.now(),
             name: name,
+            userId: req.user?.id || null,
+            username: req.user?.username || null,
             createdAt: new Date().toISOString(),
             data: data
         };
@@ -1659,57 +1664,45 @@ app.delete('/api/presets/:id', (req, res) => {
     }
 });
 
-// GET /api/characters — List all characters
-app.get('/api/characters', (req, res) => {
-    const characters = readJsonFile(CHARACTERS_FILE);
-    res.json({ success: true, characters });
+
+app.get('/api/characters', auth.authMiddleware, (req, res) => {
+    const chars = readJsonFile(CHARACTERS_FILE) || [];
+    const userId = req.user.id;
+    const filtered = (req.user.role === 'admin') ? chars : chars.filter(c => c.userId === userId);
+    res.json(filtered);
 });
 
-// POST /api/characters — Save characters
-app.post('/api/characters', (req, res) => {
+app.post('/api/characters', auth.authMiddleware, (req, res) => {
     try {
-        const { characters: newChars, source } = req.body;
-        if (!newChars || !newChars.length) {
-            return res.status(400).json({ error: 'No characters provided' });
-        }
+        const { name, characterId, gender, age, species, appearance, personality, backstory, imageUrl, voiceStyle } = req.body;
+        if (!name) return res.status(400).json({ error: 'Character name required' });
 
-        const allChars = readJsonFile(CHARACTERS_FILE);
-        const saved = [];
-        for (const ch of newChars) {
-            const entry = {
-                id: 'char_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                source: source || 'unknown',
-                savedAt: new Date().toISOString(),
-                ...ch
-            };
-            allChars.push(entry);
-            saved.push(entry);
-        }
-        writeJsonFile(CHARACTERS_FILE, allChars);
-
-        console.log(`[characters] Saved ${saved.length} characters from: ${source}`);
-        res.json({ success: true, saved });
-    } catch (error) {
-        console.error('[characters] Save error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
+        const chars = readJsonFile(CHARACTERS_FILE) || [];
+        const char = {
+            id: 'char_' + Date.now(),
+            userId: req.user.id,
+            username: req.user.username,
+            name, characterId, gender, age, species,
+            appearance, personality, backstory,
+            imageUrl, voiceStyle,
+            createdAt: new Date().toISOString()
+        };
+        chars.push(char);
+        writeJsonFile(CHARACTERS_FILE, chars);
+        console.log(`[characters] Saved: ${name} by ${req.user.username}`);
+        res.json({ success: true, character: char });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/characters/:id — Delete a character
-app.delete('/api/characters/:id', (req, res) => {
+app.delete('/api/characters/:id', auth.authMiddleware, (req, res) => {
     try {
-        let characters = readJsonFile(CHARACTERS_FILE);
-        const before = characters.length;
-        characters = characters.filter(c => c.id !== req.params.id);
-        if (characters.length === before) {
-            return res.status(404).json({ error: 'Character not found' });
-        }
-        writeJsonFile(CHARACTERS_FILE, characters);
-        console.log(`[characters] Deleted: ${req.params.id}`);
+        let chars = readJsonFile(CHARACTERS_FILE) || [];
+        const before = chars.length;
+        chars = chars.filter(c => c.id !== req.params.id || (c.userId !== req.user.id && req.user.role !== 'admin'));
+        if (chars.length === before) return res.status(404).json({ error: 'Not found' });
+        writeJsonFile(CHARACTERS_FILE, chars);
         res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ============ START SERVER ============

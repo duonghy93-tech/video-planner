@@ -570,7 +570,10 @@ function renderPlan(plan, targetId) {
 
         html += `
             <div class="characters-section" style="display:block">
-                <h3>🎭 Nhân Vật (${plan.characters.length})</h3>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h3>🎭 Nhân Vật (${plan.characters.length})</h3>
+                    <button class="btn-ghost btn-sm" onclick="saveCharactersFromPlan()" style="color:#8b5cf6">💾 Lưu Nhân Vật</button>
+                </div>
                 <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">Mô tả chi tiết để đảm bảo nhất quán qua các clip</p>
                 <div class="characters-grid">${charCards}</div>
             </div>`;
@@ -1669,20 +1672,53 @@ async function saveCharactersFromDNA() {
         showToast('⚠️ Không có nhân vật trong DNA');
         return;
     }
-
     try {
-        const source = currentDNA.video_dna?.title || 'DNA Analysis';
-        const res = await fetch('/api/characters', {
-            method: 'POST',
-            headers: getApiHeaders(),
-            body: JSON.stringify({ characters: currentDNA.characters, source })
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-
-        showToast(`✅ Đã lưu ${data.saved.length} nhân vật!`);
+        let saved = 0;
+        for (const ch of currentDNA.characters) {
+            const res = await fetch('/api/characters', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify({
+                    name: ch.name || 'Unknown',
+                    characterId: ch.character_id || ch.name?.toLowerCase().replace(/\s+/g, '_'),
+                    gender: ch.gender, age: ch.age, species: ch.species,
+                    appearance: ch.appearance, personality: ch.personality,
+                    backstory: ch.backstory, imageUrl: ch.imageUrl,
+                    voiceStyle: ch.voice_style
+                })
+            });
+            if (res.ok) saved++;
+        }
+        showToast(`✅ Đã lưu ${saved} nhân vật vào thư viện!`);
         await loadCharacters();
+    } catch (err) {
+        showToast('❌ Lỗi: ' + err.message);
+    }
+}
+
+async function saveCharactersFromPlan() {
+    if (!currentPlan || !currentPlan.characters || !currentPlan.characters.length) {
+        showToast('⚠️ Không có nhân vật trong kế hoạch');
+        return;
+    }
+    try {
+        let saved = 0;
+        for (const ch of currentPlan.characters) {
+            const res = await fetch('/api/characters', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify({
+                    name: ch.name || 'Unknown',
+                    characterId: ch.character_id || ch.name?.toLowerCase().replace(/\s+/g, '_'),
+                    gender: ch.gender, age: ch.age, species: ch.species,
+                    appearance: ch.appearance, personality: ch.personality,
+                    backstory: ch.backstory, imageUrl: ch.generatedImageUrl || ch.imageUrl,
+                    voiceStyle: ch.voice_style
+                })
+            });
+            if (res.ok) saved++;
+        }
+        showToast(`✅ Đã lưu ${saved} nhân vật vào thư viện!`);
     } catch (err) {
         showToast('❌ Lỗi: ' + err.message);
     }
