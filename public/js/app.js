@@ -3523,7 +3523,7 @@ async function sendChat() {
 
         const res = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+            headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'x-api-key': getStoredApiKey() },
             body: formData
         });
         const data = await res.json();
