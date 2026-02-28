@@ -329,18 +329,19 @@ async function loadHistory() {
     try {
         const res = await fetch('/api/history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
         const items = await res.json();
+        window._textHistoryItems = items; // Store globally
         if (!items.length) {
             container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;font-style:italic;text-align:center;padding:12px">Chưa có lịch sử tạo video</p>';
             return;
         }
-        container.innerHTML = items.map(h => {
+        container.innerHTML = items.map((h, idx) => {
             const date = new Date(h.createdAt);
             const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-            return `<div style="padding:10px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);cursor:pointer;transition:all 0.2s;margin-bottom:6px" onmouseover="this.style.borderColor='rgba(139,92,246,0.3)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'" onclick="useHistoryItem(this)" data-desc="${h.description.replace(/"/g, '&quot;')}" data-duration="${h.duration}">
+            return `<div style="padding:10px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);cursor:pointer;transition:all 0.2s;margin-bottom:6px" onmouseover="this.style.borderColor='rgba(139,92,246,0.3)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'" onclick="useHistoryItem(${idx})">
                 <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
                     <div style="flex:1;min-width:0">
-                        <div style="font-size:0.82rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.projectName || h.description.substring(0, 40)}</div>
-                        <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px">${h.clipCount} clips • ${h.duration}s • ${timeStr}${h.presetName ? ' • ' + h.presetName : ''}</div>
+                        <div style="font-size:0.82rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.projectName || (h.description || '').substring(0, 40)}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px">${h.clipCount || 0} clips • ${h.duration || 0}s • ${timeStr}${h.presetName ? ' • ' + h.presetName : ''}${h.channelName ? ' • 📺 ' + h.channelName : ''}</div>
                     </div>
                     <button onclick="event.stopPropagation();deleteHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;padding:2px 4px;opacity:0.5" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
                 </div>
@@ -351,14 +352,24 @@ async function loadHistory() {
     }
 }
 
-function useHistoryItem(el) {
-    const desc = el.dataset.desc;
-    const dur = el.dataset.duration;
-    const descInput = document.getElementById('textDescription');
-    const durInput = document.getElementById('durationInput');
-    if (descInput && desc) descInput.value = desc;
-    if (durInput && dur) durInput.value = dur;
-    showToast('📋 Đã tải mô tả từ lịch sử');
+function useHistoryItem(idx) {
+    const h = window._textHistoryItems?.[idx];
+    if (!h) return;
+    if (h.plan) {
+        // Load full plan and render it
+        currentPlan = h.plan;
+        renderPlan(currentPlan, 'textResults');
+        document.getElementById('textDescription').value = h.description || '';
+        const durInput = document.getElementById('durationInput');
+        if (durInput && h.duration) durInput.value = h.duration;
+        showToast(`✅ Đã tải lại kế hoạch: ${h.projectName || 'Video'}`);
+    } else {
+        // No plan, just fill description
+        document.getElementById('textDescription').value = h.description || '';
+        const durInput = document.getElementById('durationInput');
+        if (durInput && h.duration) durInput.value = h.duration;
+        showToast('📋 Đã tải mô tả — cần bấm "Tạo Kế Hoạch" lại');
+    }
 }
 
 async function deleteHistoryItem(id) {
