@@ -1841,7 +1841,7 @@ app.get('/api/presets', auth.optionalAuth, (req, res) => {
     const presets = readJsonFile(PRESETS_FILE);
     const userId = req.user?.id;
     // Users see only their own presets; admin sees all
-    const filtered = (req.user?.role === 'admin') ? presets : presets.filter(p => p.userId === userId || !p.userId);
+    const filtered = (req.user?.role === 'admin') ? presets : presets.filter(p => p.userId === userId);
     res.json({ success: true, presets: filtered });
 });
 
