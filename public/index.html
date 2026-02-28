@@ -598,6 +598,17 @@
             <div class="results-section" id="videoResults" style="display:none;"></div>
             <!-- DNA Results -->
             <div class="results-section" id="dnaResults" style="display:none;"></div>
+
+            <!-- Analysis History -->
+            <div class="dna-card" style="margin-top:20px">
+                <h3 style="margin-bottom:12px;cursor:pointer"
+                    onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                    📋 Lịch sử phân tích <span style="font-size:0.7rem;color:var(--text-secondary)">(click
+                        ẩn/hiện)</span></h3>
+                <div id="analysisHistoryList">
+                    <p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Đang tải...</p>
+                </div>
+            </div>
         </section>
         <section class="tab-content" id="panelReview">
             <div class="input-section">
@@ -638,6 +649,17 @@
 
             <!-- Review Tab Results -->
             <div class="results-section" id="reviewResultsSection" style="display:none;"></div>
+
+            <!-- Review History -->
+            <div class="dna-card" style="margin-top:20px">
+                <h3 style="margin-bottom:12px;cursor:pointer"
+                    onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                    📋 Lịch sử đánh giá <span style="font-size:0.7rem;color:var(--text-secondary)">(click
+                        ẩn/hiện)</span></h3>
+                <div id="reviewHistoryList">
+                    <p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Đang tải...</p>
+                </div>
+            </div>
         </section>
 
         <!-- Loading Overlay -->

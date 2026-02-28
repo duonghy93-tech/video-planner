@@ -146,6 +146,8 @@ function switchTab(tabName) {
     // Auto-load data when tab is switched
     if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); loadAdminChatLogs(); }
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
+    if (tabName === 'analyze') { loadAnalysisHistory(); }
+    if (tabName === 'review') { loadReviewHistory(); }
     if (tabName === 'profile') { loadProfile(); }
     if (tabName === 'channels') { renderUserCharts(); }
 }
@@ -400,6 +402,76 @@ async function deleteHistoryItem(id) {
         loadHistory();
         showToast('🗑️ Đã xóa');
     } catch (e) { showToast('❌ Lỗi xóa'); }
+}
+
+// ============ ANALYSIS HISTORY ============
+async function loadAnalysisHistory() {
+    const container = document.getElementById('analysisHistoryList');
+    if (!container) return;
+    try {
+        const res = await fetch('/api/analysis-history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        const items = await res.json();
+        if (!items.length) {
+            container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center;padding:8px">Chưa có lịch sử phân tích</p>';
+            return;
+        }
+        container.innerHTML = items.map(h => {
+            const date = new Date(h.createdAt);
+            const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            const size = h.fileSize ? (h.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '';
+            return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <div style="font-size:0.8rem;color:var(--text-primary)">📹 ${h.filename || h.projectName || 'Video'}</div>
+                    <div style="font-size:0.65rem;color:var(--text-secondary)">${h.clipCount || 0} clips • ${size} • ${timeStr}</div>
+                </div>
+                <button onclick="deleteAnalysisHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
+            </div>`;
+        }).join('');
+    } catch (e) { container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Lỗi tải lịch sử</p>'; }
+}
+
+async function deleteAnalysisHistoryItem(id) {
+    try {
+        await fetch('/api/analysis-history/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        loadAnalysisHistory();
+        showToast('🗑️ Đã xóa');
+    } catch (e) { showToast('❌ Lỗi'); }
+}
+
+// ============ REVIEW HISTORY ============
+async function loadReviewHistory() {
+    const container = document.getElementById('reviewHistoryList');
+    if (!container) return;
+    try {
+        const res = await fetch('/api/review-history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        const items = await res.json();
+        if (!items.length) {
+            container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center;padding:8px">Chưa có lịch sử đánh giá</p>';
+            return;
+        }
+        container.innerHTML = items.map(h => {
+            const date = new Date(h.createdAt);
+            const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            const size = h.fileSize ? (h.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '';
+            const score = h.overallScore ? `⭐ ${h.overallScore}/10` : '';
+            return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <div style="font-size:0.8rem;color:var(--text-primary)">⭐ ${h.filename || 'Video'} ${score}</div>
+                    <div style="font-size:0.65rem;color:var(--text-secondary)">${size} • ${timeStr}</div>
+                    ${h.summary ? `<div style="font-size:0.65rem;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px">${h.summary}</div>` : ''}
+                </div>
+                <button onclick="deleteReviewHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
+            </div>`;
+        }).join('');
+    } catch (e) { container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Lỗi tải lịch sử</p>'; }
+}
+
+async function deleteReviewHistoryItem(id) {
+    try {
+        await fetch('/api/review-history/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        loadReviewHistory();
+        showToast('🗑️ Đã xóa');
+    } catch (e) { showToast('❌ Lỗi'); }
 }
 
 // ============ HANDLER: VIDEO → PLAN ============
@@ -2163,21 +2235,26 @@ function renderRoadmap() {
                                 </select>
                                 <div style="display:grid;gap:2px;margin-top:4px;width:100%">
                                     ${['youtube', 'tiktok', 'facebook', 'instagram'].map(p => {
-                        const icons = { youtube: '\ud83c\udfac', tiktok: '\ud83c\udfb5', facebook: '\ud83d\udcd8', instagram: '\ud83d\udcf8' };
+                        const icons = { youtube: '▶', tiktok: '♪', facebook: 'f', instagram: '📷' };
+                        const colors = { youtube: '#f00', tiktok: '#00f2ea', facebook: '#1877f2', instagram: '#e4405f' };
+                        const labels = { youtube: 'YT', tiktok: 'TT', facebook: 'FB', instagram: 'IG' };
                         const urls = video.publishedUrls || {};
                         const oldUrl = !video.publishedUrls && video.publishedUrl && p === 'youtube' ? video.publishedUrl : '';
                         return `<div style="display:flex;gap:2px;align-items:center">
-                                            <span style="font-size:0.6rem;width:14px">${icons[p]}</span>
+                                            <span style="font-size:0.55rem;min-width:20px;text-align:center;color:${colors[p]};font-weight:700">${labels[p]}</span>
                                             <input type="text" id="scan_${day.day}_${video.slot}_${p}" placeholder="${p}" value="${urls[p] || oldUrl}" style="font-size:0.6rem;padding:1px 3px;flex:1;background:var(--bg-input);border:1px solid var(--border-light);border-radius:3px;color:var(--text-primary)">
                                             <button class="btn-ghost" onclick="scanPlatformVideo('${rm.id}',${day.day},${video.slot},'${p}')" style="font-size:0.55rem;padding:0 2px">\ud83d\udd0d</button>
                                         </div>`;
                     }).join('')}
                                 </div>
-                                ${video.metrics ? `<div style="margin-top:4px;font-size:0.65rem;color:#10b981">` +
-                            Object.entries(video.metrics).filter(([k]) => ['youtube', 'tiktok', 'facebook', 'instagram'].includes(k)).map(([p, m]) =>
-                                `<div>${p}: ${(m.views || 0).toLocaleString()}👁 ${(m.likes || 0).toLocaleString()}❤️</div>`
-                            ).join('') +
-                            (video.metrics.views !== undefined ? `<div>Total: ${(video.metrics.views || 0).toLocaleString()}👁</div>` : '') +
+                                ${video.metrics ? `<div style="margin-top:4px;font-size:0.7rem">` +
+                            Object.entries(video.metrics).filter(([k]) => ['youtube', 'tiktok', 'facebook', 'instagram'].includes(k)).map(([p, m]) => {
+                                const c = { youtube: '#f00', tiktok: '#00f2ea', facebook: '#1877f2', instagram: '#e4405f' };
+                                const l = { youtube: 'YT', tiktok: 'TT', facebook: 'FB', instagram: 'IG' };
+                                const interactions = (m.likes || 0) + (m.shares || 0) + (m.comments || 0) + (m.saves || 0);
+                                return `<div><span style="color:${c[p]};font-weight:700">${l[p]}</span>: <span style="color:var(--text-primary)">${(m.views || 0).toLocaleString()}</span>👁 <span style="color:#10b981">${interactions.toLocaleString()}</span>⚡</div>`;
+                            }).join('') +
+                            (video.metrics.views !== undefined ? `<div style="color:var(--text-secondary)">Total: ${(video.metrics.views || 0).toLocaleString()}👁</div>` : '') +
                             `</div>` : ''}
                             </div>
                         </div>
@@ -2699,6 +2776,8 @@ async function viewChannelDetail(id, isAdmin) {
             const totalViews = platformStats.youtube.views + platformStats.tiktok.views + platformStats.facebook.views;
             const totalLikes = platformStats.youtube.likes + platformStats.tiktok.likes + platformStats.facebook.likes;
             const totalComments = platformStats.youtube.comments + platformStats.tiktok.comments + platformStats.facebook.comments;
+            const totalShares = (platformStats.youtube.shares || 0) + (platformStats.tiktok.shares || 0) + (platformStats.facebook.shares || 0);
+            const totalInteractions = totalLikes + totalShares + totalComments;
 
             const platformCard = (icon, name, color, stats) => {
                 if (stats.count === 0) return '';
@@ -2725,8 +2804,8 @@ async function viewChannelDetail(id, isAdmin) {
                         <div style="font-size:0.65rem;color:var(--text-secondary)">👁 Tổng xem</div>
                     </div>
                     <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px">
-                        <div style="font-size:1.2rem;font-weight:700;color:#ef4444">${totalLikes.toLocaleString()}</div>
-                        <div style="font-size:0.65rem;color:var(--text-secondary)">❤️ Tổng thích</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:#ef4444">${totalInteractions.toLocaleString()}</div>
+                        <div style="font-size:0.65rem;color:var(--text-secondary)">⚡ Tương tác</div>
                     </div>
                     <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px">
                         <div style="font-size:1.2rem;font-weight:700;color:#10b981">${totalComments.toLocaleString()}</div>
@@ -2815,10 +2894,9 @@ async function loadWeeklySummary(roadmapId) {
         return `<div class="dna-card" style="margin-bottom:16px;background:rgba(16,185,129,0.05)">
             <h4 style="margin:0 0 8px">\ud83d\udcca T\u1ed5ng K\u1ebft Tu\u1ea7n</h4>
             <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.9rem">
-                <span>\ud83d\udc41 ${(s.totalViews || 0).toLocaleString()} views</span>
-                <span>\u2764\ufe0f ${(s.totalLikes || 0).toLocaleString()} likes</span>
-                <span>\ud83d\udcac ${(s.totalComments || 0).toLocaleString()} comments</span>
-                <span>\ud83d\udcca Avg: ${(s.avgViews || 0).toLocaleString()} views/video</span>
+                <span>👁 ${(s.totalViews || 0).toLocaleString()} views</span>
+                <span>⚡ ${((s.totalLikes || 0) + (s.totalComments || 0)).toLocaleString()} tương tác</span>
+                <span>📊 Avg: ${(s.avgViews || 0).toLocaleString()} views/video</span>
             </div>
             ${s.bestVideo ? `<div style="margin-top:6px;font-size:0.85rem;color:#10b981">\ud83c\udfc6 Best: "${s.bestVideo.title}" (${(s.bestVideo.views || 0).toLocaleString()} views)</div>` : ''}
         </div>`;
@@ -2921,10 +2999,10 @@ async function renderAnalyticsCharts() {
                         tension: 0.4,
                         pointRadius: 3
                     }, {
-                        label: 'Likes',
-                        data: data.dailyStats.map(d => d.likes),
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239,68,68,0.1)',
+                        label: 'Tương tác',
+                        data: data.dailyStats.map(d => (d.likes || 0) + (d.shares || 0) + (d.comments || 0)),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16,185,129,0.1)',
                         fill: true,
                         tension: 0.4,
                         pointRadius: 3

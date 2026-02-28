@@ -120,6 +120,8 @@ if (!fs.existsSync(dataDir)) {
 const PRESETS_FILE = path.join(dataDir, 'presets.json');
 const CHARACTERS_FILE = path.join(dataDir, 'characters.json');
 const HISTORY_FILE = path.join(dataDir, 'history.json');
+const ANALYSIS_HISTORY_FILE = path.join(dataDir, 'analysis_history.json');
+const REVIEW_HISTORY_FILE = path.join(dataDir, 'review_history.json');
 const TEMPLATES_FILE = path.join(dataDir, 'templates.json');
 
 // ============ JSON STORAGE HELPERS ============
@@ -851,6 +853,23 @@ app.post('/api/analyze-video', upload.single('video'), async (req, res) => {
         const planDir = path.join(outputDir, projectName + '_' + Date.now());
         fs.mkdirSync(planDir, { recursive: true });
         fs.writeFileSync(path.join(planDir, 'plan.json'), JSON.stringify(plan, null, 2));
+
+        // Save to analysis history
+        const userId = req.user?.id || 'anonymous';
+        let aHist = readJsonFile(ANALYSIS_HISTORY_FILE);
+        if (Array.isArray(aHist) || !aHist) aHist = {};
+        if (!aHist[userId]) aHist[userId] = [];
+        aHist[userId].unshift({
+            id: 'ah_' + Date.now().toString(36),
+            filename: req.file.originalname,
+            fileSize: req.file.size,
+            clipCount: plan.clips?.length || 0,
+            projectName: plan.project_name || projectName,
+            langFormat,
+            createdAt: new Date().toISOString()
+        });
+        if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
+        writeJsonFile(ANALYSIS_HISTORY_FILE, aHist);
 
         res.json({ success: true, plan, outputDir: planDir });
     } catch (error) {
@@ -1761,11 +1780,58 @@ app.post('/api/review-video', upload.single('video'), async (req, res) => {
         fs.mkdirSync(reviewDir, { recursive: true });
         fs.writeFileSync(path.join(reviewDir, 'review.json'), JSON.stringify(review, null, 2));
 
+        // Save to review history
+        const userId = req.user?.id || 'anonymous';
+        let rHist = readJsonFile(REVIEW_HISTORY_FILE);
+        if (Array.isArray(rHist) || !rHist) rHist = {};
+        if (!rHist[userId]) rHist[userId] = [];
+        rHist[userId].unshift({
+            id: 'rh_' + Date.now().toString(36),
+            filename: req.file.originalname,
+            fileSize: req.file.size,
+            overallScore: review.overall_score || review.overallScore || null,
+            summary: (review.summary || review.overall_assessment || '').substring(0, 200),
+            createdAt: new Date().toISOString()
+        });
+        if (rHist[userId].length > 30) rHist[userId] = rHist[userId].slice(0, 30);
+        writeJsonFile(REVIEW_HISTORY_FILE, rHist);
+
         res.json({ success: true, review, outputDir: reviewDir });
     } catch (error) {
         console.error('[review-video] Error:', error.message);
         res.status(500).json({ error: error.message });
     }
+});
+
+// ============ ANALYSIS & REVIEW HISTORY ============
+app.get('/api/analysis-history', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    let hist = readJsonFile(ANALYSIS_HISTORY_FILE);
+    if (Array.isArray(hist) || !hist) hist = {};
+    res.json(hist[userId] || []);
+});
+
+app.delete('/api/analysis-history/:id', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    let hist = readJsonFile(ANALYSIS_HISTORY_FILE);
+    if (Array.isArray(hist) || !hist) hist = {};
+    if (hist[userId]) { hist[userId] = hist[userId].filter(h => h.id !== req.params.id); writeJsonFile(ANALYSIS_HISTORY_FILE, hist); }
+    res.json({ success: true });
+});
+
+app.get('/api/review-history', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    let hist = readJsonFile(REVIEW_HISTORY_FILE);
+    if (Array.isArray(hist) || !hist) hist = {};
+    res.json(hist[userId] || []);
+});
+
+app.delete('/api/review-history/:id', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    let hist = readJsonFile(REVIEW_HISTORY_FILE);
+    if (Array.isArray(hist) || !hist) hist = {};
+    if (hist[userId]) { hist[userId] = hist[userId].filter(h => h.id !== req.params.id); writeJsonFile(REVIEW_HISTORY_FILE, hist); }
+    res.json({ success: true });
 });
 
 // ============ PRESET & CHARACTER CRUD ============
