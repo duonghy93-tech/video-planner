@@ -2442,13 +2442,13 @@ async function loadAdminDashboard() {
         const userListEl = document.getElementById('adminUserList');
         if (userListEl && data.userList) {
             userListEl.innerHTML = data.userList.map(u => `
-                <div class="dna-card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+                <div class="dna-card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="showAdminUserDetail('${u.id}')">
                     <div>
                         <strong>${u.role === 'admin' ? '\ud83d\udc51' : '\ud83d\udc64'} ${u.name || u.username}</strong>
                         <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">@${u.username} \u2022 ${u.role}</span>
                         <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">\ud83d\udcfa ${u.channelCount} k\u00eanh \u2022 \ud83d\uddd3\ufe0f ${u.roadmapCount} roadmaps</span>
                     </div>
-                    ${u.role !== 'admin' ? `<button class="btn-ghost btn-danger btn-sm" onclick="deleteUserAdmin('${u.id}')" title="X\u00f3a">\ud83d\uddd1\ufe0f</button>` : ''}
+                    ${u.role !== 'admin' ? `<button class="btn-ghost btn-danger btn-sm" onclick="event.stopPropagation();deleteUserAdmin('${u.id}')" title="X\u00f3a">\ud83d\uddd1\ufe0f</button>` : ''}
                 </div>`).join('');
         }
 
@@ -2568,6 +2568,57 @@ async function deleteUserAdmin(userId) {
         loadAdminDashboard();
     } catch (err) {
         showToast('\u274c ' + err.message);
+    }
+}
+
+async function showAdminUserDetail(userId) {
+    try {
+        const res = await fetch('/api/admin/user/' + userId, {
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) throw new Error('Không tải được');
+        const d = await res.json();
+        const u = d.user;
+
+        const fmtDate = (iso) => { if (!iso) return ''; const dt = new Date(iso); return dt.toLocaleDateString('vi-VN') + ' ' + dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
+
+        const section = (icon, title, items, renderItem) => {
+            if (!items.length) return `<div style="margin-top:12px"><strong>${icon} ${title}</strong> <span style="color:var(--text-secondary);font-size:0.8rem">— Chưa có</span></div>`;
+            return `<div style="margin-top:12px"><strong>${icon} ${title}</strong> <span style="color:var(--text-secondary);font-size:0.75rem">(${items.length})</span>
+                <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">${items.map(renderItem).join('')}</div>
+            </div>`;
+        };
+
+        const card = (text, sub) => `<div style="padding:6px 10px;background:rgba(0,0,0,0.12);border-radius:6px;font-size:0.82rem">
+            <div style="color:var(--text-primary)">${text}</div>
+            ${sub ? `<div style="font-size:0.7rem;color:var(--text-secondary)">${sub}</div>` : ''}
+        </div>`;
+
+        const html = `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <span style="padding:4px 12px;background:rgba(139,92,246,0.15);border-radius:8px;font-size:0.8rem">👤 @${u.username}</span>
+                <span style="padding:4px 12px;background:rgba(59,130,246,0.15);border-radius:8px;font-size:0.8rem">${u.role}</span>
+                <span style="padding:4px 12px;background:rgba(16,185,129,0.15);border-radius:8px;font-size:0.8rem">📅 ${fmtDate(u.createdAt)}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-bottom:12px">
+                <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#8b5cf6">${d.channels.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Kênh</div></div>
+                <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#10b981">${d.presets.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Preset</div></div>
+                <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#f59e0b">${d.characters.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Nhân vật</div></div>
+                <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#3b82f6">${d.roadmaps.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Roadmaps</div></div>
+            </div>
+            ${section('📺', 'Kênh', d.channels, c => card(c.name, `${c.niche || ''} • ${c.language} • ${c.postsPerDay} video/ngày`))}
+            ${section('📂', 'Preset', d.presets, p => card(p.name, fmtDate(p.createdAt)))}
+            ${section('🎭', 'Nhân vật', d.characters, c => card(c.name, `${c.gender || ''} • ${c.role_in_video || ''}`))}
+            ${section('📝', 'Lịch sử tạo video', d.generationHistory, h => card(h.projectName || h.description?.substring(0, 40) || 'Video', `${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}`))}
+            ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, h => card(h.filename || h.projectName || 'Video', `${h.clipCount || 0} clips • ${fmtDate(h.createdAt)}`))}
+            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => card(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/10' : ''}`, fmtDate(h.createdAt)))}
+        `;
+
+        document.getElementById('channelDetailTitle').textContent = `👤 ${u.name || u.username}`;
+        document.getElementById('channelDetailBody').innerHTML = html;
+        document.getElementById('channelDetailModal').classList.add('active');
+    } catch (err) {
+        showToast('❌ ' + err.message);
     }
 }
 
@@ -2772,6 +2823,7 @@ async function viewChannelDetail(id, isAdmin) {
         });
 
         const hasMetrics = platformStats.youtube.count + platformStats.tiktok.count + platformStats.facebook.count > 0;
+        let metricsHtml = '';
         if (hasMetrics || totalPublished > 0) {
             const totalViews = platformStats.youtube.views + platformStats.tiktok.views + platformStats.facebook.views;
             const totalLikes = platformStats.youtube.likes + platformStats.tiktok.likes + platformStats.facebook.likes;

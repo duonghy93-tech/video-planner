@@ -238,6 +238,37 @@ app.get('/api/admin/roadmaps', auth.authMiddleware, (req, res) => {
     })));
 });
 
+// GET /api/admin/user/:id — Detailed view of a specific user (admin only)
+app.get('/api/admin/user/:id', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const users = auth.getUsers();
+    const user = users.find(u => u.id === req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const channels = readJsonFile(path.join(dataDir, 'channels.json')).filter(c => c.userId === user.id);
+    const roadmaps = readJsonFile(path.join(dataDir, 'roadmaps.json')).filter(r => r.userId === user.id);
+    const presets = readJsonFile(PRESETS_FILE).filter(p => p.userId === user.id);
+    const characters = readJsonFile(CHARACTERS_FILE).filter(c => c.userId === user.id);
+
+    let analysisHist = readJsonFile(ANALYSIS_HISTORY_FILE);
+    if (Array.isArray(analysisHist) || !analysisHist) analysisHist = {};
+    const analysisHistory = analysisHist[user.id] || [];
+
+    let reviewHist = readJsonFile(REVIEW_HISTORY_FILE);
+    if (Array.isArray(reviewHist) || !reviewHist) reviewHist = {};
+    const reviewHistory = reviewHist[user.id] || [];
+
+    let genHist = readJsonFile(HISTORY_FILE);
+    if (Array.isArray(genHist) || !genHist) genHist = {};
+    const generationHistory = genHist[user.id] || [];
+
+    res.json({
+        user: { id: user.id, username: user.username, name: user.name, role: user.role, createdAt: user.createdAt },
+        channels, roadmaps, presets, characters,
+        analysisHistory, reviewHistory, generationHistory
+    });
+});
+
 // ============ STRATEGY CHAT ============
 app.post('/api/channels/:id/strategy', auth.authMiddleware, async (req, res) => {
     try {
