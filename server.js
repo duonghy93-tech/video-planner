@@ -911,7 +911,7 @@ app.post('/api/analyze-video', auth.authMiddleware, upload.single('video'), asyn
 });
 
 // POST /api/analyze-dna — Deep DNA analysis of uploaded video
-app.post('/api/analyze-dna', upload.single('video'), async (req, res) => {
+app.post('/api/analyze-dna', auth.authMiddleware, upload.single('video'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'No video file uploaded' });
@@ -926,6 +926,25 @@ app.post('/api/analyze-dna', upload.single('video'), async (req, res) => {
         fs.mkdirSync(dnaDir, { recursive: true });
         fs.writeFileSync(path.join(dnaDir, 'dna.json'), JSON.stringify(dna, null, 2));
 
+        // Save to analysis history
+        const userId = req.user?.id || 'anonymous';
+        let aHist = readJsonFile(ANALYSIS_HISTORY_FILE);
+        if (Array.isArray(aHist) || !aHist) aHist = {};
+        if (!aHist[userId]) aHist[userId] = [];
+        aHist[userId].unshift({
+            id: 'dna_' + Date.now().toString(36),
+            type: 'dna',
+            filename: req.file.originalname,
+            fileSize: req.file.size,
+            title: dna.video_dna?.title || 'DNA Video',
+            overallScore: dna.video_dna?.overall_score || null,
+            langFormat,
+            plan: dna,
+            createdAt: new Date().toISOString()
+        });
+        if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
+        writeJsonFile(ANALYSIS_HISTORY_FILE, aHist);
+
         res.json({ success: true, dna, outputDir: dnaDir });
     } catch (error) {
         console.error('[analyze-dna] Error:', error.message);
@@ -934,7 +953,7 @@ app.post('/api/analyze-dna', upload.single('video'), async (req, res) => {
 });
 
 // POST /api/analyze-dna-url — DNA analysis from URL
-app.post('/api/analyze-dna-url', async (req, res) => {
+app.post('/api/analyze-dna-url', auth.authMiddleware, async (req, res) => {
     try {
         const { url, langFormat } = req.body;
         if (!url) {
@@ -950,6 +969,25 @@ app.post('/api/analyze-dna-url', async (req, res) => {
         const dnaDir = path.join(outputDir, 'dna_' + Date.now());
         fs.mkdirSync(dnaDir, { recursive: true });
         fs.writeFileSync(path.join(dnaDir, 'dna.json'), JSON.stringify(dna, null, 2));
+
+        // Save to analysis history
+        const userId = req.user?.id || 'anonymous';
+        let aHist = readJsonFile(ANALYSIS_HISTORY_FILE);
+        if (Array.isArray(aHist) || !aHist) aHist = {};
+        if (!aHist[userId]) aHist[userId] = [];
+        aHist[userId].unshift({
+            id: 'dna_' + Date.now().toString(36),
+            type: 'dna',
+            filename: url.split('/').pop() || 'URL Video',
+            title: dna.video_dna?.title || 'DNA Video',
+            overallScore: dna.video_dna?.overall_score || null,
+            sourceUrl: url,
+            langFormat: langFormat || 'VN',
+            plan: dna,
+            createdAt: new Date().toISOString()
+        });
+        if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
+        writeJsonFile(ANALYSIS_HISTORY_FILE, aHist);
 
         res.json({ success: true, dna, outputDir: dnaDir });
     } catch (error) {

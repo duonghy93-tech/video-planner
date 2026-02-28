@@ -421,10 +421,13 @@ async function loadAnalysisHistory() {
             const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             const size = h.fileSize ? (h.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '';
             const hasData = h.plan ? 'cursor:pointer' : '';
+            const isDNA = h.type === 'dna';
+            const label = isDNA ? `🧬 ${h.title || h.filename || 'DNA Video'}` : `📹 ${h.filename || h.projectName || 'Video'}`;
+            const scoreTxt = isDNA && h.overallScore ? ` ⭐${h.overallScore}/100` : '';
             return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;${hasData};transition:all 0.2s" ${h.plan ? `onclick="viewAnalysisHistoryItem(${idx})" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'"` : ''}>
                 <div>
-                    <div style="font-size:0.8rem;color:var(--text-primary)">📹 ${h.filename || h.projectName || 'Video'} ${h.plan ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
-                    <div style="font-size:0.65rem;color:var(--text-secondary)">${h.clipCount || 0} clips • ${size} • ${timeStr}</div>
+                    <div style="font-size:0.8rem;color:var(--text-primary)">${label}${scoreTxt} ${h.plan ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
+                    <div style="font-size:0.65rem;color:var(--text-secondary)">${h.clipCount ? h.clipCount + ' clips • ' : ''}${size} • ${timeStr}</div>
                 </div>
                 <button onclick="event.stopPropagation();deleteAnalysisHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
             </div>`;
@@ -435,11 +438,19 @@ async function loadAnalysisHistory() {
 function viewAnalysisHistoryItem(idx) {
     const items = window._analysisHistoryItems;
     if (!items || !items[idx] || !items[idx].plan) { showToast('⚠️ Không có dữ liệu phân tích'); return; }
-    currentPlan = items[idx].plan;
-    renderPlan(currentPlan, 'videoResults');
-    const resultsEl = document.getElementById('videoResults');
-    if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    showToast('📋 Đang hiển thị: ' + (items[idx].filename || items[idx].projectName || 'Video'));
+    const item = items[idx];
+    if (item.type === 'dna') {
+        currentDNA = item.plan;
+        renderDNAResults(currentDNA, 'dnaResults');
+        const el = document.getElementById('dnaResults');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        currentPlan = item.plan;
+        renderPlan(currentPlan, 'videoResults');
+        const resultsEl = document.getElementById('videoResults');
+        if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    showToast('📋 Đang hiển thị: ' + (item.filename || item.title || item.projectName || 'Video'));
 }
 
 async function deleteAnalysisHistoryItem(id) {
@@ -1428,7 +1439,6 @@ function renderDNAResults(dna, targetId) {
             <h2>🧬 DNA Video — ${vd.title || 'Untitled'}</h2>
             <div class="results-actions">
                 <button class="btn-dna-save" onclick="savePresetFromDNA()">💾 Lưu Preset</button>
-                ${dna.characters && dna.characters.length ? `<button class="btn-dna-save" onclick="saveCharactersFromDNA()">🎭 Lưu Nhân Vật</button>` : ''}
                 <button class="btn-secondary" onclick="copyDNAJson()">📋 Copy JSON</button>
             </div>
         </div>`;
@@ -1556,7 +1566,9 @@ function renderDNAResults(dna, targetId) {
             <div class="dna-card">
                 <h3>🎭 Nhân Vật (${dna.characters.length})</h3>
                 <div class="dna-characters-grid">
-                    ${dna.characters.map(ch => `
+                    ${dna.characters.map((ch, ci) => {
+            const isSaved = savedCharacters.some(sc => sc.name === ch.name);
+            return `
                         <div class="dna-char-card">
                             <div class="dna-char-avatar">${ch.gender === 'female' ? '👩' : '👨'}</div>
                             <div class="dna-char-name">${ch.name}</div>
@@ -1565,8 +1577,14 @@ function renderDNAResults(dna, targetId) {
                             ${ch.clothing ? `<div class="dna-char-detail"><b>Trang phục:</b> ${ch.clothing}</div>` : ''}
                             ${ch.personality ? `<div class="dna-char-detail"><b>Tính cách:</b> ${ch.personality}</div>` : ''}
                             ${ch.role_in_video ? `<div class="dna-char-detail"><b>Vai trò:</b> ${ch.role_in_video}</div>` : ''}
-                        </div>
-                    `).join('')}
+                            <div style="margin-top:8px;text-align:center">
+                                ${isSaved
+                    ? '<span style="color:#10b981;font-size:0.75rem">✅ Đã lưu</span>'
+                    : `<button class="btn-dna-save" style="font-size:0.75rem;padding:4px 12px" onclick="saveSingleCharFromDNA(${ci})">💾 Lưu nhân vật này</button>`
+                }
+                            </div>
+                        </div>`;
+        }).join('')}
                 </div>
             </div>`;
     }
@@ -1809,7 +1827,6 @@ async function loadCharacters() {
         console.error('Failed to load characters:', e);
     }
 }
-
 async function saveCharactersFromDNA() {
     if (!currentDNA || !currentDNA.characters || !currentDNA.characters.length) {
         showToast('⚠️ Không có nhân vật trong DNA');
@@ -1865,6 +1882,34 @@ async function saveCharactersFromPlan() {
     } catch (err) {
         showToast('❌ Lỗi: ' + err.message);
     }
+}
+
+async function saveSingleCharFromDNA(index) {
+    if (!currentDNA || !currentDNA.characters || !currentDNA.characters[index]) {
+        showToast('⚠️ Không tìm thấy nhân vật'); return;
+    }
+    const ch = currentDNA.characters[index];
+    const name = prompt('Tên nhân vật:', ch.name || 'Unknown');
+    if (!name) return;
+    try {
+        const res = await fetch('/api/characters', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({
+                name,
+                characterId: name.toLowerCase().replace(/\s+/g, '_'),
+                gender: ch.gender || '', age: ch.age || '', species: ch.species || '',
+                appearance: ch.appearance || '', personality: ch.personality || '',
+                role_in_video: ch.role_in_video || '', clothing: ch.clothing || '',
+                ref_prompt: ch.ref_prompt || '', backstory: ch.backstory || '',
+                voiceStyle: ch.voice_style || '', source: 'dna'
+            })
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        showToast('✅ Đã lưu: ' + name);
+        await loadCharacters();
+        renderDNAResults(currentDNA, 'dnaResults');
+    } catch (err) { showToast('❌ ' + err.message); }
 }
 
 async function deleteCharacter(id) {
@@ -2763,7 +2808,10 @@ async function showAdminUserDetail(userId) {
             ${section('📺', 'Kênh', d.channels, c => card(c.name, `${c.niche || ''} • ${c.language} • ${c.postsPerDay} video/ngày`))}
             ${section('📂', 'Preset', d.presets, renderPreset)}
             ${section('🎭', 'Nhân vật', d.characters, renderChar)}
-            ${section('📝', 'Lịch sử tạo video', d.generationHistory, h => card(h.projectName || h.description?.substring(0, 40) || 'Video', `${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}`))}
+            ${section('📝', 'Lịch sử tạo video', d.generationHistory, h => {
+            const detail = `📋 Dự án: ${h.projectName || h.description || 'N/A'}\n🎬 Clips: ${h.clipCount || 0} • ⏱ ${h.duration || 0}s\n📺 Kênh: ${h.channelName || 'N/A'}\n📂 Preset: ${h.presetName || 'N/A'}\n🎨 Style: ${h.templateStyle || 'N/A'}\n🌐 Ngôn ngữ: ${h.langFormat || 'N/A'}`;
+            return expandCard(h.projectName || h.description?.substring(0, 40) || 'Video', `${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}`, detail);
+        })}
             ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, h => card(h.filename || h.projectName || 'Video', `${h.clipCount || 0} clips • ${fmtDate(h.createdAt)}`))}
             ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => card(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/100' : ''}`, fmtDate(h.createdAt)))}
         `;
