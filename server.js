@@ -1088,17 +1088,23 @@ app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()),
         if (!history[userId]) history[userId] = [];
         history[userId].unshift({
             id: 'h_' + Date.now().toString(36),
-            description: description.substring(0, 120),
+            username: req.user?.username || 'anonymous',
+            description: description.substring(0, 200),
             duration: parseInt(duration),
             clipCount: plan.clips?.length || 0,
             projectName: plan.project_name || projectName,
             presetName: presetName || null,
             langFormat: langFormat || 'VN',
+            channelId: req.body.channelId || null,
+            channelName: req.body.channelName || null,
+            roadmapTask: req.body.roadmapTask || null,
+            templateStyle: req.body.templateStyle || null,
+            plan: plan, // full plan data
             outputDir: planDir,
             createdAt: new Date().toISOString()
         });
-        // Keep max 50 per user
-        if (history[userId].length > 50) history[userId] = history[userId].slice(0, 50);
+        // Keep max 30 per user
+        if (history[userId].length > 30) history[userId] = history[userId].slice(0, 30);
         writeJsonFile(HISTORY_FILE, history);
 
         res.json({ success: true, plan, outputDir: planDir });

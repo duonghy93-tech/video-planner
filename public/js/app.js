@@ -280,10 +280,31 @@ async function handleTextGenerate() {
         const langFormat = document.getElementById('langFormat')?.value || 'VN';
         const presetId = document.getElementById('presetSelect')?.value || '';
 
+        // Append template style if selected
+        let fullDescription = description;
+        if (window._selectedTemplate) {
+            fullDescription += `\n\n[Video Style: ${window._selectedTemplate.name} — ${window._selectedTemplate.desc}]`;
+        }
+
+        // Gather channel/roadmap context
+        const channelId = document.getElementById('channelForGenerate')?.value || '';
+        const channelName = channelId ? document.getElementById('channelForGenerate')?.selectedOptions[0]?.text : '';
+        const taskIdx = document.getElementById('roadmapTaskSelect')?.value;
+        const roadmapTask = (taskIdx !== '' && window._generatorTasks) ? window._generatorTasks[parseInt(taskIdx)] : null;
+
         const res = await fetch('/api/analyze-text', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ description, duration: parseInt(duration), langFormat, presetId: presetId || undefined })
+            body: JSON.stringify({
+                description: fullDescription,
+                duration: parseInt(duration),
+                langFormat,
+                presetId: presetId || undefined,
+                channelId: channelId || undefined,
+                channelName: channelName || undefined,
+                roadmapTask: roadmapTask ? { title: roadmapTask.title, rmName: roadmapTask.rmName, day: roadmapTask.day } : undefined,
+                templateStyle: window._selectedTemplate?.name || undefined
+            })
         });
 
         const data = await res.json();
@@ -2670,24 +2691,44 @@ function selectTemplate(el) {
     el.classList.add('tpl-active');
     el.style.borderColor = '#8b5cf6';
     el.style.transform = 'translateY(-2px)';
-    // Fill form
-    const desc = el.dataset.desc;
-    const dur = parseInt(el.dataset.duration) || 24;
-    document.getElementById('textDescription').value = desc;
-    document.getElementById('durationInput').value = dur;
-    document.getElementById('durationSlider').value = dur;
-    // Update clip count
-    const clipCount = Math.ceil(dur / 8);
-    const clipEl = document.getElementById('clipCount');
-    if (clipEl) clipEl.textContent = `= ${clipCount} clips × 8s`;
-    showToast('🎨 Đã chọn template — bạn có thể chỉnh sửa mô tả!');
+
+    // Store template style info — do NOT overwrite description
+    const styleName = el.querySelector('div:nth-child(2)')?.textContent || '';
+    const styleDesc = el.dataset.desc;
+    window._selectedTemplate = { name: styleName, desc: styleDesc };
+
+    // Show style badge
+    let badge = document.getElementById('templateBadge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'templateBadge';
+        badge.style.cssText = 'margin-top:6px;padding:6px 12px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:8px;font-size:0.8rem;color:#a78bfa;display:flex;align-items:center;gap:6px';
+        document.getElementById('templateGrid')?.parentElement?.appendChild(badge);
+    }
+    badge.innerHTML = `🎨 Style: <strong>${styleName}</strong> <span style="color:var(--text-secondary);font-size:0.7rem">(sẽ áp dụng khi tạo)</span> <button onclick="clearTemplate()" style="margin-left:auto;background:none;border:none;color:#f87171;cursor:pointer;font-size:0.9rem">✕</button>`;
+
+    showToast('🎨 Đã chọn style — nội dung giữ nguyên!');
+}
+
+function clearTemplate() {
+    document.querySelectorAll('.tpl-card').forEach(c => {
+        c.classList.remove('tpl-active');
+        c.style.borderColor = 'var(--border)';
+        c.style.transform = 'none';
+    });
+    window._selectedTemplate = null;
+    const badge = document.getElementById('templateBadge');
+    if (badge) badge.remove();
+    showToast('Đã bỏ chọn style');
 }
 
 // ============ ANALYTICS CHARTS ============
 let chartDaily = null, chartPlatform = null;
+let _analyticsLoading = false;
 
 async function renderAnalyticsCharts() {
-    if (typeof Chart === 'undefined') return; // Chart.js not loaded
+    if (typeof Chart === 'undefined' || _analyticsLoading) return;
+    _analyticsLoading = true;
     try {
         const res = await fetch('/api/admin/analytics', {
             headers: { 'Authorization': 'Bearer ' + getAuthToken() }
@@ -2767,7 +2808,7 @@ async function renderAnalyticsCharts() {
                 }
             });
         }
-    } catch (e) { console.error('Analytics error:', e); }
+    } catch (e) { console.error('Analytics error:', e); } finally { _analyticsLoading = false; }
 }
 
 // ============ EXPORT / IMPORT ROADMAPS ============
@@ -2988,15 +3029,19 @@ async function loadProfile() {
                 if (!historyItems.length) {
                     hList.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85rem">Chưa có lịch sử tạo video</p>';
                 } else {
-                    hList.innerHTML = historyItems.map(h => `
-                        <div class="dna-card" style="padding:10px;margin-bottom:6px;cursor:pointer;transition:all 0.2s" onclick="useHistoryItem(this)" 
-                            data-desc="${(h.description || '').replace(/"/g, '&quot;')}" data-duration="${h.duration || 24}"
+                    // Store for plan viewing
+                    window._historyItems = historyItems;
+                    hList.innerHTML = historyItems.map((h, idx) => `
+                        <div class="dna-card" style="padding:10px;margin-bottom:6px;cursor:pointer;transition:all 0.2s" onclick="viewHistoryPlan(${idx})" 
                             onmouseover="this.style.borderColor='rgba(139,92,246,0.5)'" onmouseout="this.style.borderColor='var(--border)'">
                             <div style="display:flex;justify-content:space-between;align-items:center">
                                 <div style="flex:1;min-width:0">
-                                    <div style="font-size:0.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.description || 'Video'}</div>
+                                    <div style="font-size:0.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.projectName || h.description || 'Video'}</div>
                                     <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px">
-                                        ${h.presetName ? '📂 ' + h.presetName + ' • ' : ''}${h.clipCount || 0} clips • ${h.duration || 0}s
+                                        ${h.channelName ? '📺 ' + h.channelName + ' • ' : ''}${h.roadmapTask ? '📋 ' + h.roadmapTask.title + ' • ' : ''}${h.clipCount || 0} clips • ${h.duration || 0}s
+                                    </div>
+                                    <div style="font-size:0.65rem;color:var(--text-secondary);margin-top:1px">
+                                        ${h.presetName ? '📂 ' + h.presetName + ' • ' : ''}${h.templateStyle ? '🎨 ' + h.templateStyle + ' • ' : ''}${h.langFormat || 'VN'}${h.username ? ' • 👤 ' + h.username : ''}
                                     </div>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:8px">
@@ -3044,5 +3089,23 @@ function saveProfileApiKey() {
         localStorage.setItem('gemini_api_key', key);
         configureApiKey(key);
         showToast('✅ Đã lưu API Key!');
+    }
+}
+
+function viewHistoryPlan(idx) {
+    const h = window._historyItems?.[idx];
+    if (!h) return;
+    if (h.plan) {
+        // Switch to text tab and render the saved plan
+        switchTab('text');
+        currentPlan = h.plan;
+        renderPlan(currentPlan, 'textResults');
+        document.getElementById('textDescription').value = h.description || '';
+        showToast(`📜 Đã tải lại kế hoạch: ${h.projectName || 'Video'}`);
+    } else {
+        // No plan saved, just fill description
+        switchTab('text');
+        document.getElementById('textDescription').value = h.description || '';
+        showToast(`📋 Đã tải mô tả — cần tạo lại kế hoạch`);
     }
 }
