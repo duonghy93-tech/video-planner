@@ -143,6 +143,8 @@ function switchTab(tabName) {
     if (btn) btn.classList.add('active');
     const panel = document.getElementById(`panel${capitalize(tabName)}`);
     if (panel) panel.classList.add('active');
+    // Persist tab in URL hash
+    if (location.hash !== '#' + tabName) history.replaceState(null, '', '#' + tabName);
     // Auto-load data when tab is switched
     if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); loadAdminChatLogs(); }
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
@@ -156,6 +158,11 @@ function setupTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
+    // Restore tab from URL hash on page load
+    const hash = location.hash.replace('#', '');
+    if (hash && document.querySelector(`.tab-btn[data-tab="${hash}"]`)) {
+        setTimeout(() => switchTab(hash), 100);
+    }
 }
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -2778,41 +2785,7 @@ async function loadAdminDashboard() {
             }
         }
 
-        // Load all roadmaps
-        const rmRes = await fetch('/api/admin/roadmaps', {
-            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
-        });
-        if (rmRes.ok) {
-            const roadmaps = await rmRes.json();
-            const rmListEl = document.getElementById('adminRoadmapList');
-            if (rmListEl) {
-                if (!roadmaps.length) {
-                    rmListEl.innerHTML = '<p style="color:var(--text-secondary)">Ch\u01b0a c\u00f3 roadmap n\u00e0o</p>';
-                } else {
-                    window._adminRoadmaps = roadmaps;
-                    rmListEl.innerHTML = roadmaps.map((r, idx) => {
-                        const totalVideos = r.days?.reduce((sum, d) => sum + (d.videos?.length || 0), 0) || 0;
-                        const published = r.days?.reduce((sum, d) => sum + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
-                        const pct = totalVideos > 0 ? Math.round(published / totalVideos * 100) : 0;
-                        return `
-                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="adminViewRoadmap(${idx})">
-                            <div style="display:flex;justify-content:space-between;align-items:center">
-                                <div>
-                                    <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
-                                    <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">\ud83d\udcfa ${r.channelName} \u2022 by @${r.ownerName}</span>
-                                </div>
-                                <div style="display:flex;align-items:center;gap:8px">
-                                    <div style="width:60px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
-                                        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#8b5cf6,#3b82f6);border-radius:2px"></div>
-                                    </div>
-                                    <span style="color:var(--text-secondary);font-size:0.75rem;white-space:nowrap">${published}/${totalVideos}</span>
-                                </div>
-                            </div>
-                        </div>`;
-                    }).join('');
-                }
-            }
-        }
+        // Roadmaps removed from admin panel — visible per-channel and per-user instead
 
     } catch (e) {
         console.error('Admin load error:', e);
@@ -2947,19 +2920,17 @@ async function showAdminUserDetail(userId) {
             ${section('📺', 'Kênh', d.channels, c => expandCard(c.name, `${c.niche || ''} • ${c.language} • ${c.postsPerDay} video/ngày`, `📺 Tên: ${c.name}\n📁 Niche: ${c.niche || 'N/A'}\n🌐 Ngôn ngữ: ${c.language || 'N/A'}\n📊 Video/ngày: ${c.postsPerDay || 'N/A'}\n📅 Tạo: ${fmtDate(c.createdAt)}`))}
             ${section('📂', 'Preset', d.presets, renderPreset)}
             ${section('🎭', 'Nhân vật', d.characters, renderChar)}
-            ${section('🗺️', 'Roadmaps', d.roadmaps, r => {
+            ${section('🗺️', 'Roadmaps', d.roadmaps, (r, i) => {
+            window._adminDetailData = window._adminDetailData || {};
+            window._adminDetailData['rm_' + i] = r;
             const days = r.days || {};
             const dayCount = Object.keys(days).length;
             const totalSlots = Object.values(days).reduce((sum, d) => sum + (Array.isArray(d) ? d.length : 0), 0);
-            let detail = `📅 Kênh: ${r.channelName || 'N/A'}\n📊 Ngày: ${dayCount} | Slots: ${totalSlots}\n📅 Tạo: ${fmtDate(r.createdAt)}`;
-            Object.entries(days).slice(0, 5).forEach(([day, slots]) => {
-                detail += `\n\n📅 ${day}:`;
-                (Array.isArray(slots) ? slots : []).forEach((s, i) => {
-                    detail += `\n  ${i + 1}. ${s.description || s.topic || 'Slot'} ${s.status === 'published' ? '✅' : '⏳'}`;
-                });
-            });
-            if (dayCount > 5) detail += `\n\n... và ${dayCount - 5} ngày nữa`;
-            return expandCard(`🗺️ ${r.channelName || 'Roadmap'}`, `${dayCount} ngày • ${totalSlots} slots • ${fmtDate(r.createdAt)}`, detail);
+            return `<div style="padding:8px 10px;background:rgba(0,0,0,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;transition:all 0.2s" onclick="adminViewFullDetail('rm_${i}','roadmap')" onmouseover="this.style.background='rgba(0,0,0,0.18)'" onmouseout="this.style.background='rgba(0,0,0,0.12)'">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div><div style="color:var(--text-primary)">🗺️ ${r.channelName || r.roadmap_name || 'Roadmap'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">${dayCount} ngày • ${totalSlots} slots • ${fmtDate(r.createdAt)}</div></div>
+                        <span style="font-size:0.65rem;color:var(--accent-purple)">▶ Xem full</span>
+                    </div></div>`;
         })}
             ${section('📝', 'Lịch sử tạo video', d.generationHistory, (h, i) => {
             window._adminDetailData = window._adminDetailData || {};
@@ -3025,6 +2996,38 @@ function adminViewFullDetail(key, type) {
         body.innerHTML = '<div id="adminRenderTarget"></div>';
         modal.classList.add('active');
         setTimeout(() => renderPlan(data.plan, 'adminRenderTarget'), 100);
+    } else if (type === 'roadmap') {
+        const days = data.days || {};
+        title.textContent = '🗺️ ' + (data.roadmap_name || data.channelName || 'Roadmap');
+        let html = `<div style="max-width:700px;margin:0 auto">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.82rem">
+                <span style="padding:4px 10px;background:rgba(139,92,246,0.15);border-radius:6px">📺 ${data.channelName || 'N/A'}</span>
+                <span style="padding:4px 10px;background:rgba(16,185,129,0.15);border-radius:6px">📅 ${Object.keys(days).length} ngày</span>
+                <span style="padding:4px 10px;background:rgba(59,130,246,0.15);border-radius:6px">🎬 ${Object.values(days).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0)} slots</span>
+            </div>`;
+        if (data.weekly_strategy) {
+            html += `<div class="dna-card" style="padding:12px;margin-bottom:12px"><h4 style="margin:0 0 6px">📋 Chiến lược tuần</h4><p style="font-size:0.85rem;color:var(--text-secondary);margin:0">${data.weekly_strategy}</p></div>`;
+        }
+        Object.entries(days).forEach(([day, slots]) => {
+            html += `<div class="dna-card" style="padding:12px;margin-bottom:8px">
+                <h4 style="margin:0 0 8px;color:var(--accent-purple)">📅 ${day}</h4>
+                <div style="display:grid;gap:6px">`;
+            (Array.isArray(slots) ? slots : []).forEach((s, i) => {
+                const status = s.status === 'published' ? '<span style="color:#10b981">✅ Đã đăng</span>' : '<span style="color:var(--text-secondary)">⏳ Chờ</span>';
+                html += `<div style="padding:8px;background:rgba(0,0,0,0.08);border-radius:6px;font-size:0.82rem">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <strong>${i + 1}. ${s.title || s.description || s.topic || 'Slot'}</strong>
+                        ${status}
+                    </div>
+                    ${s.description ? `<div style="color:var(--text-secondary);margin-top:4px;font-size:0.78rem">${s.description}</div>` : ''}
+                    ${s.hashtags ? `<div style="color:var(--accent-purple);margin-top:3px;font-size:0.72rem">${Array.isArray(s.hashtags) ? s.hashtags.join(' ') : s.hashtags}</div>` : ''}
+                </div>`;
+            });
+            html += '</div></div>';
+        });
+        html += '</div>';
+        body.innerHTML = html;
+        modal.classList.add('active');
     } else if (type === 'review') {
         const review = data.review || data;
         title.textContent = '⭐ Review: ' + (data.filename || 'Video');
