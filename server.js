@@ -119,6 +119,7 @@ if (!fs.existsSync(dataDir)) {
 
 const PRESETS_FILE = path.join(dataDir, 'presets.json');
 const CHARACTERS_FILE = path.join(dataDir, 'characters.json');
+const HISTORY_FILE = path.join(dataDir, 'history.json');
 
 // ============ JSON STORAGE HELPERS ============
 function readJsonFile(filePath) {
@@ -549,9 +550,21 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
             const ytdlpPath = getYtdlpCmd();
             if (ytdlpPath) {
                 try {
+                    const isTikTok = /tiktok\.com/i.test(url);
+                    const isFacebook = /facebook\.com|fb\.watch/i.test(url);
+                    const args = [
+                        '--dump-json', '--no-download',
+                        '--no-check-certificates',
+                        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    ];
+                    if (isTikTok) {
+                        args.push('--extractor-args', 'tiktok:api_hostname=api22-normal-c-alisg.tiktokv.com');
+                    }
+                    args.push(url);
+
                     const metadata = await new Promise((resolve, reject) => {
-                        execFile(ytdlpPath, ['--dump-json', '--no-download', url],
-                            { timeout: 30000 }, (err, stdout) => {
+                        execFile(ytdlpPath, args,
+                            { timeout: 45000 }, (err, stdout) => {
                                 if (err) return reject(err);
                                 try { resolve(JSON.parse(stdout)); } catch (e) { reject(e); }
                             });
@@ -561,11 +574,12 @@ app.post('/api/scan-published', auth.authMiddleware, async (req, res) => {
                         likes: metadata.like_count || 0,
                         comments: metadata.comment_count || 0,
                         duration: metadata.duration || 0,
-                        title: metadata.title || '',
+                        title: metadata.title || metadata.description?.substring(0, 80) || '',
                         scannedAt: new Date().toISOString()
                     };
+                    console.log(`[yt-dlp] ${isTikTok ? 'TikTok' : isFacebook ? 'Facebook' : 'Video'} — views: ${metrics.views}, likes: ${metrics.likes}, comments: ${metrics.comments}`);
                 } catch (e) {
-                    console.error('[yt-dlp] Failed:', e.message?.substring(0, 100));
+                    console.error('[yt-dlp] Failed:', e.message?.substring(0, 200));
                 }
             }
         }
@@ -999,7 +1013,7 @@ function downloadDirect(url) {
 // ============ OTHER API ROUTES ============
 
 // POST /api/analyze-text — Generate plan from text
-app.post('/api/analyze-text', async (req, res) => {
+app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()), async (req, res) => {
     try {
         const { description, duration, langFormat, presetId } = req.body;
         if (!description || !duration) {
@@ -1008,12 +1022,14 @@ app.post('/api/analyze-text', async (req, res) => {
 
         // Load preset if specified
         let preset = null;
+        let presetName = '';
         if (presetId) {
             const presets = readJsonFile(PRESETS_FILE);
-            preset = presets.find(p => p.id === presetId);
-            if (preset) {
-                console.log(`[analyze-text] Using preset: ${preset.name}`);
-                preset = preset.data; // extract the DNA data
+            const found = presets.find(p => p.id === presetId);
+            if (found) {
+                console.log(`[analyze-text] Using preset: ${found.name}`);
+                presetName = found.name;
+                preset = found.data; // extract the DNA data
             }
         }
 
@@ -1026,12 +1042,50 @@ app.post('/api/analyze-text', async (req, res) => {
         fs.mkdirSync(planDir, { recursive: true });
         fs.writeFileSync(path.join(planDir, 'plan.json'), JSON.stringify(plan, null, 2));
 
+        // Save to history per user
+        const userId = req.user?.id || 'anonymous';
+        const history = readJsonFile(HISTORY_FILE) || {};
+        if (!history[userId]) history[userId] = [];
+        history[userId].unshift({
+            id: 'h_' + Date.now().toString(36),
+            description: description.substring(0, 120),
+            duration: parseInt(duration),
+            clipCount: plan.clips?.length || 0,
+            projectName: plan.project_name || projectName,
+            presetName: presetName || null,
+            langFormat: langFormat || 'VN',
+            outputDir: planDir,
+            createdAt: new Date().toISOString()
+        });
+        // Keep max 50 per user
+        if (history[userId].length > 50) history[userId] = history[userId].slice(0, 50);
+        writeJsonFile(HISTORY_FILE, history);
+
         res.json({ success: true, plan, outputDir: planDir });
     } catch (error) {
         console.error('[analyze-text] Error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
+
+// GET /api/history — Get generation history for current user
+app.get('/api/history', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    const history = readJsonFile(HISTORY_FILE) || {};
+    res.json(history[userId] || []);
+});
+
+// DELETE /api/history/:id — Delete a history item
+app.delete('/api/history/:id', auth.optionalAuth || ((req, res, next) => next()), (req, res) => {
+    const userId = req.user?.id || 'anonymous';
+    const history = readJsonFile(HISTORY_FILE) || {};
+    if (history[userId]) {
+        history[userId] = history[userId].filter(h => h.id !== req.params.id);
+        writeJsonFile(HISTORY_FILE, history);
+    }
+    res.json({ success: true });
+});
+
 
 // POST /api/generate-image
 app.post('/api/generate-image', async (req, res) => {

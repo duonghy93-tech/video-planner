@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPresets();
     loadCharacters();
     loadMyChannels();
+    loadHistory();
 
     // Auto-fill API key input from localStorage
     const savedKey = getStoredApiKey();
@@ -120,8 +121,9 @@ function setupTabs() {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById(`panel${capitalize(tab)}`).classList.add('active');
-            // Auto-load admin data when tab is clicked
+            // Auto-load data when tab is clicked
             if (tab === 'admin') loadAdminDashboard();
+            if (tab === 'text') loadHistory();
         });
     });
 }
@@ -285,11 +287,59 @@ async function handleTextGenerate() {
         currentPlan._outputDir = data.outputDir;
         renderPlan(currentPlan, 'textResults');
         showToast('✅ Đã tạo kế hoạch thành công!');
+        loadHistory(); // Refresh history
     } catch (err) {
         showToast('❌ Lỗi: ' + err.message);
     } finally {
         hideLoading();
     }
+}
+
+// ============ GENERATION HISTORY ============
+async function loadHistory() {
+    const container = document.getElementById('historyList');
+    if (!container) return;
+    try {
+        const res = await fetch('/api/history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        const items = await res.json();
+        if (!items.length) {
+            container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;font-style:italic;text-align:center;padding:12px">Chưa có lịch sử tạo video</p>';
+            return;
+        }
+        container.innerHTML = items.map(h => {
+            const date = new Date(h.createdAt);
+            const timeStr = date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            return `<div style="padding:10px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);cursor:pointer;transition:all 0.2s;margin-bottom:6px" onmouseover="this.style.borderColor='rgba(139,92,246,0.3)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'" onclick="useHistoryItem(this)" data-desc="${h.description.replace(/"/g, '&quot;')}" data-duration="${h.duration}">
+                <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:0.82rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.projectName || h.description.substring(0, 40)}</div>
+                        <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px">${h.clipCount} clips • ${h.duration}s • ${timeStr}${h.presetName ? ' • ' + h.presetName : ''}</div>
+                    </div>
+                    <button onclick="event.stopPropagation();deleteHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;padding:2px 4px;opacity:0.5" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        console.error('History load error:', e);
+    }
+}
+
+function useHistoryItem(el) {
+    const desc = el.dataset.desc;
+    const dur = el.dataset.duration;
+    const descInput = document.getElementById('textDescription');
+    const durInput = document.getElementById('durationInput');
+    if (descInput && desc) descInput.value = desc;
+    if (durInput && dur) durInput.value = dur;
+    showToast('📋 Đã tải mô tả từ lịch sử');
+}
+
+async function deleteHistoryItem(id) {
+    try {
+        await fetch('/api/history/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        loadHistory();
+        showToast('🗑️ Đã xóa');
+    } catch (e) { showToast('❌ Lỗi xóa'); }
 }
 
 // ============ HANDLER: VIDEO → PLAN ============
@@ -2172,15 +2222,20 @@ async function loadAdminDashboard() {
                     rmListEl.innerHTML = roadmaps.map(r => {
                         const totalVideos = r.days?.reduce((sum, d) => sum + (d.videos?.length || 0), 0) || 0;
                         const published = r.days?.reduce((sum, d) => sum + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
-                        const rmJson = JSON.stringify(r).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const pct = totalVideos > 0 ? Math.round(published / totalVideos * 100) : 0;
                         return `
-                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="currentRoadmapChannelId='${r.channelId}';currentRoadmap=JSON.parse(this.dataset.rm);switchTab('channels');setTimeout(()=>renderRoadmap(),100);" data-rm='${JSON.stringify(r).replace(/'/g, "\\'")}'>
-                            <div style="display:flex;justify-content:space-between">
+                        <div class="dna-card" style="margin-bottom:8px;cursor:pointer" onclick="adminViewRoadmap(this)" data-rm='${JSON.stringify(r).replace(/'/g, "\\'")}' data-channel-id="${r.channelId}">
+                            <div style="display:flex;justify-content:space-between;align-items:center">
                                 <div>
                                     <strong>\ud83d\uddd3\ufe0f ${r.roadmap_name || 'Roadmap'}</strong>
                                     <span style="color:var(--text-secondary);font-size:0.8rem;margin-left:8px">\ud83d\udcfa ${r.channelName} \u2022 by @${r.ownerName}</span>
                                 </div>
-                                <span style="color:var(--text-secondary);font-size:0.8rem">${r.week_start || ''} \u2022 ${published}/${totalVideos} \u0111\u00e3 \u0111\u0103ng</span>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <div style="width:60px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
+                                        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#8b5cf6,#3b82f6);border-radius:2px"></div>
+                                    </div>
+                                    <span style="color:var(--text-secondary);font-size:0.75rem;white-space:nowrap">${published}/${totalVideos}</span>
+                                </div>
                             </div>
                         </div>`;
                     }).join('');
@@ -2190,6 +2245,20 @@ async function loadAdminDashboard() {
 
     } catch (e) {
         console.error('Admin load error:', e);
+    }
+}
+
+function adminViewRoadmap(el) {
+    try {
+        const rm = JSON.parse(el.dataset.rm);
+        const channelId = el.dataset.channelId;
+        currentRoadmapChannelId = channelId;
+        currentRoadmap = rm;
+        switchTab('channels');
+        setTimeout(() => renderRoadmap(), 200);
+    } catch (e) {
+        console.error('Error viewing roadmap:', e);
+        showToast('❌ Không thể mở roadmap');
     }
 }
 
