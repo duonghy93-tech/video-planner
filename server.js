@@ -1398,12 +1398,25 @@ app.post('/api/chat/conversations', auth.authMiddleware, (req, res) => {
     res.json(conv);
 });
 
-// Delete conversation
+// Delete conversation (admin only)
 app.delete('/api/chat/conversations/:convId', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Chỉ admin mới được xóa cuộc hội thoại' });
     const all = getUserChats(req.user.id);
     all[req.user.id].convs = all[req.user.id].convs.filter(c => c.id !== req.params.convId);
     writeJsonFile(CHAT_HISTORY_FILE, all);
     res.json({ success: true });
+});
+
+// Rename conversation
+app.patch('/api/chat/conversations/:convId', auth.authMiddleware, (req, res) => {
+    const { title } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title required' });
+    const all = getUserChats(req.user.id);
+    const conv = all[req.user.id].convs.find(c => c.id === req.params.convId);
+    if (!conv) return res.status(404).json({ error: 'Not found' });
+    conv.title = title.substring(0, 80);
+    writeJsonFile(CHAT_HISTORY_FILE, all);
+    res.json({ success: true, title: conv.title });
 });
 
 // Get conversation messages
@@ -1552,7 +1565,7 @@ app.get('/api/admin/chat-logs', auth.authMiddleware, (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
     let chatHistory = readJsonFile(CHAT_HISTORY_FILE);
     if (Array.isArray(chatHistory) || !chatHistory) chatHistory = {};
-    const users = readJsonFile(USERS_FILE) || [];
+    const users = readJsonFile(path.join(dataDir, 'users.json')) || [];
     console.log('[admin-chat-logs] Users in history:', Object.keys(chatHistory).length);
 
     const logs = Object.entries(chatHistory).map(([userId, data]) => {

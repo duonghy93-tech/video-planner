@@ -25,6 +25,7 @@ let uploadedVideoFile = null;
 let reviewVideoFile = null;
 let savedPresets = [];
 let savedCharacters = [];
+let _userRole = 'editor';
 
 // ============ API KEY (localStorage per-user) ============
 function getStoredApiKey() {
@@ -80,6 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (userEl) userEl.textContent = `👤 ${data.user.username}`;
             // Show admin tab if admin
             if (data.user.role === 'admin') {
+                _userRole = 'admin';
                 const adminTab = document.getElementById('tabAdmin');
                 if (adminTab) adminTab.style.display = '';
             }
@@ -3500,10 +3502,13 @@ function renderConvList() {
     }
     list.innerHTML = _chatConvs.map(c => `
         <div onclick="loadConversation('${c.id}')" style="padding:8px 10px;margin-bottom:4px;border-radius:8px;cursor:pointer;font-size:0.75rem;background:${c.id === _currentConvId ? 'rgba(139,92,246,0.2)' : 'transparent'};border:1px solid ${c.id === _currentConvId ? 'rgba(139,92,246,0.4)' : 'transparent'};transition:all 0.2s" onmouseover="this.style.background='rgba(139,92,246,0.1)'" onmouseout="this.style.background='${c.id === _currentConvId ? 'rgba(139,92,246,0.2)' : 'transparent'}'">
-            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)">${c.title || 'New Chat'}</div>
+            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-primary)">${c.channelId ? '📺' : '💬'} ${c.title || 'New Chat'}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
                 <span style="font-size:0.65rem;color:var(--text-secondary)">${c.messageCount} tin</span>
-                <button onclick="event.stopPropagation();deleteConversation('${c.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.65rem;opacity:0.5;padding:0" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">🗑</button>
+                <div style="display:flex;gap:4px">
+                    <button onclick="event.stopPropagation();renameConversation('${c.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.6rem;opacity:0.5;padding:0" onmouseover="this.style.opacity='1';this.style.color='#3b82f6'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Đổi tên">✏️</button>
+                    ${_userRole === 'admin' ? `<button onclick="event.stopPropagation();deleteConversation('${c.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.6rem;opacity:0.5;padding:0" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">🗑</button>` : ''}
+                </div>
             </div>
         </div>
     `).join('');
@@ -3541,9 +3546,32 @@ async function newChatConversation() {
     } catch (e) { showToast('❌ Lỗi tạo chat'); }
 }
 
+async function renameConversation(convId) {
+    const conv = _chatConvs.find(c => c.id === convId);
+    const newTitle = prompt('Đổi tên cuộc hội thoại:', conv?.title || '');
+    if (!newTitle || !newTitle.trim()) return;
+    try {
+        const res = await fetch(`/api/chat/conversations/${convId}`, {
+            method: 'PATCH', headers: { ...getApiHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle.trim() })
+        });
+        if (res.ok) {
+            if (conv) conv.title = newTitle.trim();
+            renderConvList();
+            const titleEl = document.getElementById('chatConvTitle');
+            if (titleEl && _currentConvId === convId) titleEl.textContent = newTitle.trim();
+            showToast('✅ Đã đổi tên');
+        } else {
+            const data = await res.json();
+            showToast('❌ ' + (data.error || 'Lỗi'));
+        }
+    } catch (e) { showToast('❌ Lỗi'); }
+}
+
 async function deleteConversation(convId) {
     try {
-        await fetch(`/api/chat/conversations/${convId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        const res = await fetch(`/api/chat/conversations/${convId}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) { const d = await res.json(); showToast('❌ ' + (d.error || 'Lỗi')); return; }
         _chatConvs = _chatConvs.filter(c => c.id !== convId);
         if (_currentConvId === convId) { _currentConvId = null; showChatWelcome(); }
         renderConvList();
