@@ -126,6 +126,7 @@ function switchTab(tabName) {
     if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); }
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
     if (tabName === 'profile') { loadProfile(); }
+    if (tabName === 'channels') { renderUserCharts(); }
 }
 
 function setupTabs() {
@@ -3120,3 +3121,210 @@ function viewHistoryPlan(idx) {
         showToast(`📋 Đã tải mô tả — cần tạo lại kế hoạch`);
     }
 }
+
+// ============ USER ANALYTICS CHARTS ============
+let userChartDaily = null, userChartPlatform = null;
+
+async function renderUserCharts() {
+    if (typeof Chart === 'undefined') return;
+    try {
+        const res = await fetch('/api/user/analytics', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Stats cards
+        const statsEl = document.getElementById('userStats');
+        if (statsEl) {
+            statsEl.innerHTML = `
+                <div class="dna-card" style="text-align:center;padding:12px">
+                    <div style="font-size:1.5rem;font-weight:800;color:var(--accent-purple)">${data.channelCount}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary)">Kênh</div>
+                </div>
+                <div class="dna-card" style="text-align:center;padding:12px">
+                    <div style="font-size:1.5rem;font-weight:800;color:#10b981">${data.totalPublished}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary)">Đã đăng</div>
+                </div>
+                <div class="dna-card" style="text-align:center;padding:12px">
+                    <div style="font-size:1.5rem;font-weight:800;color:#f59e0b">${data.totalPending}</div>
+                    <div style="font-size:0.75rem;color:var(--text-secondary)">Chờ đăng</div>
+                </div>`;
+        }
+
+        // Daily chart
+        const dailyCtx = document.getElementById('userChartDaily');
+        if (dailyCtx && data.dailyStats?.length) {
+            if (userChartDaily) userChartDaily.destroy();
+            userChartDaily = new Chart(dailyCtx, {
+                type: 'line',
+                data: {
+                    labels: data.dailyStats.map(d => d.date.substring(5)),
+                    datasets: [
+                        { label: 'Views', data: data.dailyStats.map(d => d.views), borderColor: '#8b5cf6', tension: 0.3, fill: true, backgroundColor: 'rgba(139,92,246,0.1)' },
+                        { label: 'Likes', data: data.dailyStats.map(d => d.likes), borderColor: '#10b981', tension: 0.3, fill: false }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 9 } } }, y: { ticks: { color: '#64748b', font: { size: 9 } } } } }
+            });
+        }
+
+        // Platform chart
+        const platCtx = document.getElementById('userChartPlatform');
+        if (platCtx) {
+            const ps = data.platformStats;
+            if (userChartPlatform) userChartPlatform.destroy();
+            userChartPlatform = new Chart(platCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['YouTube', 'TikTok', 'Facebook'],
+                    datasets: [{ data: [ps.youtube.views, ps.tiktok.views, ps.facebook.views], backgroundColor: ['#ef4444', '#000000', '#3b82f6'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } } }
+            });
+        }
+    } catch (e) { console.error('User charts error:', e); }
+}
+
+async function scanMyChannels() {
+    showToast('🔄 Đang quét metrics kênh của bạn...');
+    try {
+        const res = await fetch('/api/user/scan-channels', {
+            method: 'POST',
+            headers: getApiHeaders()
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`✅ Quét xong! ${data.scanned} video, ${data.errors} lỗi`);
+            renderUserCharts(); // Refresh charts
+        } else {
+            showToast('❌ ' + (data.error || 'Lỗi quét'));
+        }
+    } catch (e) { showToast('❌ Lỗi: ' + e.message); }
+}
+
+// ============ FLOATING AI CHATBOT ============
+function initChatbot() {
+    // Create floating button
+    const btn = document.createElement('div');
+    btn.id = 'chatbotToggle';
+    btn.innerHTML = '🤖';
+    btn.style.cssText = 'position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:1.5rem;cursor:pointer;box-shadow:0 4px 20px rgba(139,92,246,0.4);z-index:9999;transition:all 0.3s';
+    btn.onmouseover = () => btn.style.transform = 'scale(1.1)';
+    btn.onmouseout = () => btn.style.transform = 'scale(1)';
+    btn.onclick = toggleChatbot;
+    document.body.appendChild(btn);
+
+    // Create chat panel
+    const panel = document.createElement('div');
+    panel.id = 'chatbotPanel';
+    panel.style.cssText = 'position:fixed;bottom:86px;right:24px;width:360px;height:480px;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9998;display:none;flex-direction:column;overflow:hidden';
+    panel.innerHTML = `
+        <div style="padding:14px 16px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);display:flex;justify-content:space-between;align-items:center">
+            <div>
+                <div style="font-weight:700;color:white;font-size:0.9rem">🤖 AI Content Advisor</div>
+                <div style="font-size:0.7rem;color:rgba(255,255,255,0.7)">Gợi ý kênh • Content • Roadmap</div>
+            </div>
+            <button onclick="toggleChatbot()" style="background:none;border:none;color:white;font-size:1.2rem;cursor:pointer">✕</button>
+        </div>
+        <div id="chatMessages" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px">
+            <div style="background:rgba(139,92,246,0.15);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:85%">
+                Xin chào! 👋 Mình là trợ lý AI chuyên về video content. Bạn muốn:<br>
+                • 💡 Gợi ý ý tưởng kênh mới<br>
+                • 📝 Tạo content ideas<br>
+                • 📊 Phân tích kênh hiện tại<br>
+                • 🗓️ Lên kế hoạch content
+            </div>
+        </div>
+        <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px">
+            <input type="text" id="chatInput" placeholder="Hỏi gì đó..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-primary);font-size:0.85rem;font-family:var(--font-sans)" onkeypress="if(event.key==='Enter')sendChat()">
+            <button onclick="sendChat()" style="padding:8px 14px;background:linear-gradient(135deg,#8b5cf6,#3b82f6);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.85rem">Gửi</button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+
+    // Load chat history
+    loadChatHistory();
+}
+
+function toggleChatbot() {
+    const panel = document.getElementById('chatbotPanel');
+    if (!panel) return;
+    if (panel.style.display === 'none' || panel.style.display === '') {
+        panel.style.display = 'flex';
+        document.getElementById('chatInput')?.focus();
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+async function loadChatHistory() {
+    try {
+        const res = await fetch('/api/chat/history', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        const messages = await res.json();
+        const container = document.getElementById('chatMessages');
+        if (!container || !messages.length) return;
+
+        // Keep welcome message, add history
+        messages.forEach(m => {
+            appendChatMessage(m.role === 'user' ? 'user' : 'ai', m.content);
+        });
+    } catch (e) { /* ignore */ }
+}
+
+async function sendChat() {
+    const input = document.getElementById('chatInput');
+    const msg = input?.value?.trim();
+    if (!msg) return;
+    input.value = '';
+
+    appendChatMessage('user', msg);
+
+    // Show typing indicator
+    const typing = document.createElement('div');
+    typing.id = 'chatTyping';
+    typing.style.cssText = 'background:rgba(139,92,246,0.15);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:85%;color:var(--text-secondary)';
+    typing.textContent = '⏳ Đang suy nghĩ...';
+    document.getElementById('chatMessages')?.appendChild(typing);
+    scrollChatToBottom();
+
+    try {
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+        typing.remove();
+        if (data.reply) {
+            appendChatMessage('ai', data.reply);
+        } else {
+            appendChatMessage('ai', '❌ ' + (data.error || 'Lỗi'));
+        }
+    } catch (e) {
+        typing.remove();
+        appendChatMessage('ai', '❌ Lỗi kết nối');
+    }
+}
+
+function appendChatMessage(role, content) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    const div = document.createElement('div');
+    if (role === 'user') {
+        div.style.cssText = 'background:linear-gradient(135deg,#8b5cf6,#3b82f6);padding:10px 12px;border-radius:12px;border-top-right-radius:4px;font-size:0.82rem;max-width:85%;align-self:flex-end;color:white';
+    } else {
+        div.style.cssText = 'background:rgba(139,92,246,0.15);padding:10px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.82rem;max-width:85%;color:var(--text-primary)';
+    }
+    // Simple markdown: bold, line breaks
+    div.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    container.appendChild(div);
+    scrollChatToBottom();
+}
+
+function scrollChatToBottom() {
+    const c = document.getElementById('chatMessages');
+    if (c) setTimeout(() => c.scrollTop = c.scrollHeight, 50);
+}
+
+// Init chatbot on page load
+document.addEventListener('DOMContentLoaded', () => { setTimeout(initChatbot, 500); });

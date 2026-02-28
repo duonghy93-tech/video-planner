@@ -253,6 +253,24 @@
                 <div class="section-header">
                     <h2>📺 Quản Lý Kênh</h2>
                     <p>Tạo kênh theo chủ đề, gắn preset style, và quản lý roadmap nội dung</p>
+                    <button class="btn-ghost btn-sm" onclick="scanMyChannels()" style="margin-top:8px">🔄 Quét Metrics
+                        Kênh Của Tôi</button>
+                </div>
+
+                <!-- User Stats -->
+                <div id="userStats"
+                    style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px"></div>
+
+                <!-- User Charts -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+                    <div class="dna-card" style="padding:14px">
+                        <h4 style="margin:0 0 10px 0;font-size:0.85rem">📈 Views Kênh Của Tôi</h4>
+                        <div style="height:160px;position:relative"><canvas id="userChartDaily"></canvas></div>
+                    </div>
+                    <div class="dna-card" style="padding:14px">
+                        <h4 style="margin:0 0 10px 0;font-size:0.85rem">🎯 Phân Bổ Platform</h4>
+                        <div style="height:160px;position:relative"><canvas id="userChartPlatform"></canvas></div>
+                    </div>
                 </div>
 
                 <!-- Channel creation form -->

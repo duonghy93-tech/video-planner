@@ -1271,6 +1271,161 @@ app.get('/api/admin/analytics', auth.authMiddleware, (req, res) => {
     });
 });
 
+// ============ USER-SCOPED ANALYTICS ============
+app.get('/api/user/analytics', auth.authMiddleware, (req, res) => {
+    const channels = readJsonFile(CHANNELS_FILE) || [];
+    const userChannels = channels.filter(c => c.userId === req.user.id);
+    const channelIds = userChannels.map(c => c.id);
+    const roadmaps = (readJsonFile(ROADMAPS_FILE) || []).filter(rm => channelIds.includes(rm.channelId));
+
+    const platformStats = { youtube: { views: 0, likes: 0, comments: 0, count: 0 }, tiktok: { views: 0, likes: 0, comments: 0, count: 0 }, facebook: { views: 0, likes: 0, comments: 0, count: 0 } };
+    const dailyStats = {};
+    let totalPublished = 0, totalPending = 0;
+
+    roadmaps.forEach(rm => {
+        rm.days?.forEach(d => {
+            d.videos?.forEach(v => {
+                if (v.status === 'published') totalPublished++;
+                else totalPending++;
+                if (v.metrics) {
+                    for (const p of ['youtube', 'tiktok', 'facebook']) {
+                        if (v.metrics[p]) {
+                            platformStats[p].views += v.metrics[p].views || 0;
+                            platformStats[p].likes += v.metrics[p].likes || 0;
+                            platformStats[p].comments += v.metrics[p].comments || 0;
+                            platformStats[p].count++;
+                        }
+                    }
+                    if (v.metrics.views && !v.metrics.youtube && !v.metrics.tiktok && !v.metrics.facebook) {
+                        platformStats.youtube.views += v.metrics.views || 0;
+                        platformStats.youtube.likes += v.metrics.likes || 0;
+                        platformStats.youtube.count++;
+                    }
+                    const date = v.metrics.scannedAt?.substring(0, 10) || d.date || 'unknown';
+                    if (!dailyStats[date]) dailyStats[date] = { views: 0, likes: 0 };
+                    const allViews = (v.metrics.youtube?.views || 0) + (v.metrics.tiktok?.views || 0) + (v.metrics.facebook?.views || 0) + (v.metrics.views || 0);
+                    const allLikes = (v.metrics.youtube?.likes || 0) + (v.metrics.tiktok?.likes || 0) + (v.metrics.facebook?.likes || 0) + (v.metrics.likes || 0);
+                    dailyStats[date].views += allViews;
+                    dailyStats[date].likes += allLikes;
+                }
+            });
+        });
+    });
+
+    const sortedDaily = Object.entries(dailyStats).sort(([a], [b]) => a.localeCompare(b)).slice(-30);
+    res.json({
+        channelCount: userChannels.length,
+        roadmapCount: roadmaps.length,
+        platformStats,
+        dailyStats: sortedDaily.map(([date, stats]) => ({ date, ...stats })),
+        totalPublished, totalPending, totalVideos: totalPublished + totalPending
+    });
+});
+
+// User scan their own channels
+app.post('/api/user/scan-channels', auth.authMiddleware, async (req, res) => {
+    const channels = readJsonFile(CHANNELS_FILE) || [];
+    const userChannels = channels.filter(c => c.userId === req.user.id);
+    if (!userChannels.length) return res.json({ success: true, message: 'Không có kênh nào' });
+
+    const channelIds = userChannels.map(c => c.id);
+    const roadmaps = (readJsonFile(ROADMAPS_FILE) || []).filter(rm => channelIds.includes(rm.channelId));
+
+    let scanned = 0, errors = 0;
+    for (const rm of roadmaps) {
+        for (const d of (rm.days || [])) {
+            for (const v of (d.videos || [])) {
+                if (v.status === 'published' && v.url) {
+                    try {
+                        const { execSync } = require('child_process');
+                        const raw = execSync(`yt-dlp --dump-json --no-download "${v.url}" 2>/dev/null`, { timeout: 30000 }).toString();
+                        const info = JSON.parse(raw);
+                        const platform = v.url.includes('tiktok') ? 'tiktok' : v.url.includes('facebook') || v.url.includes('fb.') ? 'facebook' : 'youtube';
+                        if (!v.metrics) v.metrics = {};
+                        v.metrics[platform] = { views: info.view_count || 0, likes: info.like_count || 0, comments: info.comment_count || 0 };
+                        v.metrics.scannedAt = new Date().toISOString();
+                        scanned++;
+                    } catch (e) { errors++; }
+                }
+            }
+        }
+    }
+    writeJsonFile(ROADMAPS_FILE, readJsonFile(ROADMAPS_FILE).map(rm => {
+        const updated = roadmaps.find(r => r.id === rm.id);
+        return updated || rm;
+    }));
+    res.json({ success: true, scanned, errors });
+});
+
+// ============ AI CHATBOT ============
+const CHAT_HISTORY_FILE = path.join(dataDir, 'chat_history.json');
+
+app.post('/api/chat', auth.authMiddleware, async (req, res) => {
+    try {
+        const { message } = req.body;
+        if (!message) return res.status(400).json({ error: 'Message required' });
+
+        // Load user's channels and roadmaps for context
+        const channels = (readJsonFile(CHANNELS_FILE) || []).filter(c => c.userId === req.user.id);
+        const channelIds = channels.map(c => c.id);
+        const roadmaps = (readJsonFile(ROADMAPS_FILE) || []).filter(rm => channelIds.includes(rm.channelId));
+
+        // Load chat history
+        let chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
+        if (!chatHistory[req.user.id]) chatHistory[req.user.id] = [];
+
+        const userHistory = chatHistory[req.user.id].slice(-10); // Last 10 messages for context
+
+        const systemPrompt = `Bạn là trợ lý AI chuyên về chiến lược nội dung video ngắn (TikTok, YouTube Shorts, Facebook Reels).
+
+Thông tin user hiện tại:
+- Tên: ${req.user.username}
+- Số kênh: ${channels.length} kênh: ${channels.map(c => `"${c.name}" (${c.category})`).join(', ') || 'chưa có'}
+- Số roadmaps: ${roadmaps.length}
+
+Bạn có thể giúp user:
+1. Gợi ý ý tưởng kênh mới (niche, tên, chiến lược)
+2. Gợi ý nội dung video viral
+3. Phân tích kênh hiện tại và đề xuất cải thiện
+4. Tạo kế hoạch content calendar
+5. Tư vấn SEO cho video
+6. Phân tích trend
+7. Gợi ý preset/style phù hợp
+
+Trả lời ngắn gọn, thực tế, dùng emoji. Ưu tiên tiếng Việt nếu user nói tiếng Việt.`;
+
+        const conversationContext = userHistory.map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n');
+
+        const fullPrompt = `${systemPrompt}\n\nLịch sử:\n${conversationContext}\n\nUser: ${message}\n\nAI:`;
+
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const apiKey = process.env.GEMINI_API_KEY || global.__runtimeApiKey;
+        if (!apiKey) return res.status(400).json({ error: 'Chưa cấu hình API Key' });
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const result = await model.generateContent(fullPrompt);
+        const reply = result.response.text();
+
+        // Save to history
+        chatHistory[req.user.id].push({ role: 'user', content: message, time: new Date().toISOString() });
+        chatHistory[req.user.id].push({ role: 'ai', content: reply, time: new Date().toISOString() });
+        // Keep only last 100 messages per user
+        if (chatHistory[req.user.id].length > 100) chatHistory[req.user.id] = chatHistory[req.user.id].slice(-100);
+        writeJsonFile(CHAT_HISTORY_FILE, chatHistory);
+
+        res.json({ reply });
+    } catch (e) {
+        console.error('Chat error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/chat/history', auth.authMiddleware, (req, res) => {
+    const chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
+    res.json(chatHistory[req.user.id] || []);
+});
+
 // POST /api/generate-image
 app.post('/api/generate-image', async (req, res) => {
     try {
