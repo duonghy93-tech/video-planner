@@ -2997,30 +2997,47 @@ function adminViewFullDetail(key, type) {
         modal.classList.add('active');
         setTimeout(() => renderPlan(data.plan, 'adminRenderTarget'), 100);
     } else if (type === 'roadmap') {
-        const days = data.days || {};
+        const days = data.days || [];
+        const totalVideos = days.reduce((s, d) => s + (d.videos?.length || 0), 0);
+        const published = days.reduce((s, d) => s + (d.videos?.filter(v => v.publishedUrls && Object.keys(v.publishedUrls).length > 0).length || 0), 0);
         title.textContent = '🗺️ ' + (data.roadmap_name || data.channelName || 'Roadmap');
         let html = `<div style="max-width:700px;margin:0 auto">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;font-size:0.82rem">
-                <span style="padding:4px 10px;background:rgba(139,92,246,0.15);border-radius:6px">📺 ${data.channelName || 'N/A'}</span>
-                <span style="padding:4px 10px;background:rgba(16,185,129,0.15);border-radius:6px">📅 ${Object.keys(days).length} ngày</span>
-                <span style="padding:4px 10px;background:rgba(59,130,246,0.15);border-radius:6px">🎬 ${Object.values(days).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0)} slots</span>
+                <span style="padding:4px 10px;background:rgba(139,92,246,0.15);border-radius:6px">📺 ${data.channelName || data.channel || 'N/A'}</span>
+                <span style="padding:4px 10px;background:rgba(16,185,129,0.15);border-radius:6px">📅 ${days.length} ngày</span>
+                <span style="padding:4px 10px;background:rgba(59,130,246,0.15);border-radius:6px">🎬 ${totalVideos} videos</span>
+                <span style="padding:4px 10px;background:rgba(245,158,11,0.15);border-radius:6px">✅ ${published}/${totalVideos} đã đăng</span>
             </div>`;
         if (data.weekly_strategy) {
             html += `<div class="dna-card" style="padding:12px;margin-bottom:12px"><h4 style="margin:0 0 6px">📋 Chiến lược tuần</h4><p style="font-size:0.85rem;color:var(--text-secondary);margin:0">${data.weekly_strategy}</p></div>`;
         }
-        Object.entries(days).forEach(([day, slots]) => {
+        days.forEach(dayObj => {
+            const dayLabel = dayObj.day_name ? `Ngày ${dayObj.day} (${dayObj.day_name})` : `Ngày ${dayObj.day}`;
+            const dateLabel = dayObj.date ? ` — ${dayObj.date}` : '';
             html += `<div class="dna-card" style="padding:12px;margin-bottom:8px">
-                <h4 style="margin:0 0 8px;color:var(--accent-purple)">📅 ${day}</h4>
+                <h4 style="margin:0 0 4px;color:var(--accent-purple)">📅 ${dayLabel}${dateLabel}</h4>
+                ${dayObj.theme ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:8px">🎨 Theme: ${dayObj.theme}</div>` : ''}
                 <div style="display:grid;gap:6px">`;
-            (Array.isArray(slots) ? slots : []).forEach((s, i) => {
-                const status = s.status === 'published' ? '<span style="color:#10b981">✅ Đã đăng</span>' : '<span style="color:var(--text-secondary)">⏳ Chờ</span>';
+            (dayObj.videos || []).forEach((v, i) => {
+                const hasPublished = v.publishedUrls && Object.keys(v.publishedUrls).length > 0;
+                const statusHtml = hasPublished ? '<span style="color:#10b981">✅ Đã đăng</span>' : '<span style="color:var(--text-secondary)">⏳ Chờ</span>';
+                let linksHtml = '';
+                if (v.publishedUrls) {
+                    const links = [];
+                    if (v.publishedUrls.youtube) links.push(`<a href="${v.publishedUrls.youtube}" target="_blank" style="color:#f87171;font-size:0.7rem;text-decoration:none">▶️ YT</a>`);
+                    if (v.publishedUrls.tiktok) links.push(`<a href="${v.publishedUrls.tiktok}" target="_blank" style="color:#06b6d4;font-size:0.7rem;text-decoration:none">🎵 TT</a>`);
+                    if (v.publishedUrls.facebook) links.push(`<a href="${v.publishedUrls.facebook}" target="_blank" style="color:#60a5fa;font-size:0.7rem;text-decoration:none">📘 FB</a>`);
+                    if (links.length) linksHtml = `<div style="margin-top:4px;display:flex;gap:8px">${links.join('')}</div>`;
+                }
                 html += `<div style="padding:8px;background:rgba(0,0,0,0.08);border-radius:6px;font-size:0.82rem">
                     <div style="display:flex;justify-content:space-between;align-items:center">
-                        <strong>${i + 1}. ${s.title || s.description || s.topic || 'Slot'}</strong>
-                        ${status}
+                        <strong>${v.slot || (i + 1)}. ${v.title || 'Video'}</strong>
+                        ${statusHtml}
                     </div>
-                    ${s.description ? `<div style="color:var(--text-secondary);margin-top:4px;font-size:0.78rem">${s.description}</div>` : ''}
-                    ${s.hashtags ? `<div style="color:var(--accent-purple);margin-top:3px;font-size:0.72rem">${Array.isArray(s.hashtags) ? s.hashtags.join(' ') : s.hashtags}</div>` : ''}
+                    ${v.idea ? `<div style="color:var(--text-secondary);margin-top:4px;font-size:0.78rem">${v.idea}</div>` : ''}
+                    ${v.content_type ? `<div style="margin-top:3px;font-size:0.7rem;color:var(--text-secondary)">📦 ${v.content_type} ${v.best_post_time ? '• ⏰ ' + v.best_post_time : ''}</div>` : ''}
+                    ${v.hashtags?.length ? `<div style="color:var(--accent-purple);margin-top:3px;font-size:0.72rem">${v.hashtags.join(' ')}</div>` : ''}
+                    ${linksHtml}
                 </div>`;
             });
             html += '</div></div>';
@@ -3320,11 +3337,13 @@ async function viewChannelDetail(id, isAdmin) {
         // --- Roadmaps section ---
         let roadmapsHtml = '<p style="color:var(--text-secondary);font-style:italic;font-size:0.85rem">Chưa có roadmap. Tạo roadmap tại tab "Kênh".</p>';
         if (rms.length) {
-            roadmapsHtml = rms.map(r => {
+            window._adminDetailData = window._adminDetailData || {};
+            roadmapsHtml = rms.map((r, ri) => {
+                window._adminDetailData['chRm_' + ri] = r;
                 const total = r.days?.reduce((s, d) => s + (d.videos?.length || 0), 0) || 0;
-                const done = r.days?.reduce((s, d) => s + (d.videos?.filter(v => v.status === 'published').length || 0), 0) || 0;
+                const done = r.days?.reduce((s, d) => s + (d.videos?.filter(v => v.publishedUrls && Object.keys(v.publishedUrls).length > 0).length || 0), 0) || 0;
                 const pct = total > 0 ? Math.round(done / total * 100) : 0;
-                return `<div style="padding:12px;background:rgba(0,0,0,0.15);border-radius:10px;border:1px solid rgba(139,92,246,0.15);cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.15)'" onclick="document.getElementById('channelDetailModal').classList.remove('active');currentRoadmapChannelId='${ch.id}';currentRoadmap=${JSON.stringify(r).replace(/'/g, "\\\\'")};renderRoadmap();">
+                return `<div style="padding:12px;background:rgba(0,0,0,0.15);border-radius:10px;border:1px solid rgba(139,92,246,0.15);cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.15)'" onclick="adminViewFullDetail('chRm_${ri}','roadmap')">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                         <strong style="font-size:0.9rem">🗓️ ${r.roadmap_name || 'Roadmap'}</strong>
                         <span style="color:var(--text-secondary);font-size:0.75rem">${r.week_start || ''}</span>
