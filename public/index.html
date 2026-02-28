@@ -243,7 +243,24 @@
 
                 <!-- All roadmaps -->
                 <h3>🗓️ Tất Cả Roadmaps</h3>
-                <div id="adminRoadmapList"></div>
+                <div id="adminRoadmapList" style="margin-bottom:24px"></div>
+
+                <!-- Chat Logs -->
+                <h3>💬 Chat Logs (AI Chatbot)</h3>
+                <div class="dna-card" style="margin-bottom:24px">
+                    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+                        <select id="chatLogUserSelect" onchange="loadChatLogForUser()"
+                            style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-dark);color:var(--text-primary)">
+                            <option value="">-- Chọn user --</option>
+                        </select>
+                        <span id="chatLogCount" style="font-size:0.8rem;color:var(--text-secondary)"></span>
+                    </div>
+                    <div id="chatLogMessages"
+                        style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px">
+                        <p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chọn user để xem lịch
+                            sử chat</p>
+                    </div>
+                </div>
             </div>
         </section>
 

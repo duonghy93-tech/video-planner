@@ -1426,6 +1426,26 @@ app.get('/api/chat/history', auth.authMiddleware, (req, res) => {
     res.json(chatHistory[req.user.id] || []);
 });
 
+// Admin: view all users' chat logs
+app.get('/api/admin/chat-logs', auth.authMiddleware, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const chatHistory = readJsonFile(CHAT_HISTORY_FILE) || {};
+    const users = readJsonFile(USERS_FILE) || [];
+
+    const logs = Object.entries(chatHistory).map(([userId, messages]) => {
+        const user = users.find(u => u.id === userId);
+        return {
+            userId,
+            username: user?.username || 'Unknown',
+            messageCount: messages.length,
+            lastMessage: messages.length ? messages[messages.length - 1].time : null,
+            messages
+        };
+    }).sort((a, b) => (b.lastMessage || '').localeCompare(a.lastMessage || ''));
+
+    res.json(logs);
+});
+
 // POST /api/generate-image
 app.post('/api/generate-image', async (req, res) => {
     try {

@@ -123,7 +123,7 @@ function switchTab(tabName) {
     const panel = document.getElementById(`panel${capitalize(tabName)}`);
     if (panel) panel.classList.add('active');
     // Auto-load data when tab is switched
-    if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); }
+    if (tabName === 'admin') { loadAdminDashboard(); renderAnalyticsCharts(); loadAdminChatLogs(); }
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
     if (tabName === 'profile') { loadProfile(); }
     if (tabName === 'channels') { renderUserCharts(); }
@@ -2218,6 +2218,57 @@ function createPlanFromRoadmap(title, description) {
 }
 
 // ============ ADMIN DASHBOARD ============
+// ============ ADMIN CHAT LOGS ============
+let _adminChatLogs = [];
+
+async function loadAdminChatLogs() {
+    try {
+        const res = await fetch('/api/admin/chat-logs', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (!res.ok) return;
+        _adminChatLogs = await res.json();
+
+        const sel = document.getElementById('chatLogUserSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- Chọn user (' + _adminChatLogs.length + ') --</option>' +
+            _adminChatLogs.map((log, i) =>
+                `<option value="${i}">👤 ${log.username} (${log.messageCount} tin nhắn)</option>`
+            ).join('');
+    } catch (e) { /* ignore */ }
+}
+
+function loadChatLogForUser() {
+    const idx = document.getElementById('chatLogUserSelect')?.value;
+    const container = document.getElementById('chatLogMessages');
+    const countEl = document.getElementById('chatLogCount');
+    if (!container || idx === '') {
+        if (container) container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chọn user để xem</p>';
+        return;
+    }
+
+    const log = _adminChatLogs[parseInt(idx)];
+    if (!log || !log.messages.length) {
+        container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center">Chưa có tin nhắn</p>';
+        return;
+    }
+    if (countEl) countEl.textContent = `${log.messageCount} tin nhắn`;
+
+    container.innerHTML = log.messages.map(m => {
+        const time = new Date(m.time).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+        if (m.role === 'user') {
+            return `<div style="align-self:flex-end;max-width:80%;background:linear-gradient(135deg,#8b5cf6,#3b82f6);padding:8px 12px;border-radius:12px;border-top-right-radius:4px;color:white;font-size:0.8rem">
+                <div>${m.content.replace(/\n/g, '<br>')}</div>
+                <div style="font-size:0.6rem;opacity:0.6;text-align:right;margin-top:2px">${time}</div>
+            </div>`;
+        } else {
+            return `<div style="max-width:80%;background:rgba(139,92,246,0.12);padding:8px 12px;border-radius:12px;border-top-left-radius:4px;font-size:0.8rem">
+                <div>${m.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>
+                <div style="font-size:0.6rem;color:var(--text-secondary);margin-top:2px">${time}</div>
+            </div>`;
+        }
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+}
+
 async function loadAdminDashboard() {
     try {
         const res = await fetch('/api/admin/overview', {
