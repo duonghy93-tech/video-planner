@@ -1881,7 +1881,7 @@ app.get('/api/presets', auth.optionalAuth, (req, res) => {
 // POST /api/presets — Save a new preset
 app.post('/api/presets', auth.authMiddleware, (req, res) => {
     try {
-        const { name, data } = req.body;
+        const { name, data, channelId, channelName } = req.body;
         if (!name || !data) {
             return res.status(400).json({ error: 'Missing name or data' });
         }
@@ -1892,6 +1892,8 @@ app.post('/api/presets', auth.authMiddleware, (req, res) => {
             name: name,
             userId: req.user?.id || null,
             username: req.user?.username || null,
+            channelId: channelId || null,
+            channelName: channelName || null,
             createdAt: new Date().toISOString(),
             data: data
         };

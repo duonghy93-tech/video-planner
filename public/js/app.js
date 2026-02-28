@@ -1633,7 +1633,7 @@ function updatePresetDropdown() {
     savedPresets.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.textContent = `${p.name} (${new Date(p.createdAt).toLocaleDateString('vi')})`;
+        opt.textContent = p.channelName ? `${p.name} • 📺 ${p.channelName}` : `${p.name} (${new Date(p.createdAt).toLocaleDateString('vi')})`;
         select.appendChild(opt);
     });
 
@@ -1668,11 +1668,23 @@ async function savePresetFromDNA() {
     const finalName = prompt('Đặt tên preset:', name);
     if (!finalName) return;
 
+    // Ask for channel
+    let channelId = '', channelName = '';
+    const channels = window._cachedChannels || [];
+    if (channels.length) {
+        const chOptions = channels.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+        const pick = prompt(`Gắn với kênh nào?\n${chOptions}\n\nNhập số (hoặc bỏ trống):`, '');
+        if (pick) {
+            const idx = parseInt(pick) - 1;
+            if (channels[idx]) { channelId = channels[idx].id; channelName = channels[idx].name; }
+        }
+    }
+
     try {
         const res = await fetch('/api/presets', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name: finalName, data: currentDNA })
+            body: JSON.stringify({ name: finalName, data: currentDNA, channelId, channelName })
         });
 
         const data = await res.json();
@@ -1696,6 +1708,10 @@ async function saveCustomPreset() {
     if (!rules || rules.length < 20) { showToast('⚠️ Rules quá ngắn (tối thiểu 20 ký tự)'); return; }
 
     try {
+        const chSelect = document.getElementById('customPresetChannel');
+        const channelId = chSelect?.value || '';
+        const channelName = chSelect?.selectedOptions[0]?.dataset?.name || '';
+
         const presetData = {
             type: 'custom',
             custom_rules: rules,
@@ -1705,7 +1721,7 @@ async function saveCustomPreset() {
         const res = await fetch('/api/presets', {
             method: 'POST',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name, data: presetData })
+            body: JSON.stringify({ name, data: presetData, channelId, channelName })
         });
 
         const data = await res.json();
@@ -1739,6 +1755,15 @@ function openPresetManager() {
     const modal = document.getElementById('presetManagerModal');
     const body = document.getElementById('presetManagerBody');
 
+    // Populate channel dropdown
+    const chSelect = document.getElementById('customPresetChannel');
+    if (chSelect) {
+        chSelect.innerHTML = '<option value="">-- Không gắn kênh --</option>';
+        (window._cachedChannels || []).forEach(c => {
+            chSelect.innerHTML += `<option value="${c.id}" data-name="${c.name}">${c.name}</option>`;
+        });
+    }
+
     if (!savedPresets.length) {
         body.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:40px 0">Chưa có preset nào.</p>';
     } else {
@@ -1747,12 +1772,13 @@ function openPresetManager() {
                 ${savedPresets.map(p => {
             const d = p.data;
             const isCustom = d.type === 'custom';
+            const chLabel = p.channelName ? `📺 ${p.channelName} · ` : '';
             return `
                         <div class="preset-list-item">
                             <div class="preset-list-info">
                                 <div class="preset-list-name">${isCustom ? '✍️' : '🧬'} ${p.name}</div>
                                 <div class="preset-list-meta">
-                                    ${new Date(p.createdAt).toLocaleString('vi')}
+                                    ${chLabel}${new Date(p.createdAt).toLocaleString('vi')}
                                     ${isCustom ? ' · 📝 Custom Rules' : ''}
                                     ${!isCustom && d.video_dna?.overall_score ? ` · ⭐ ${d.video_dna.overall_score}/100` : ''}
                                     ${!isCustom && d.characters?.length ? ` · 🎭 ${d.characters.length} nhân vật` : ''}
@@ -2605,6 +2631,18 @@ async function showAdminUserDetail(userId) {
         const u = d.user;
 
         const fmtDate = (iso) => { if (!iso) return ''; const dt = new Date(iso); return dt.toLocaleDateString('vi-VN') + ' ' + dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); };
+        const uid = () => 'adm_' + Math.random().toString(36).substr(2, 6);
+
+        const expandCard = (title, sub, detail) => {
+            const id = uid();
+            return `<div style="padding:8px 10px;background:rgba(0,0,0,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;transition:all 0.2s;border:1px solid transparent" onclick="const el=document.getElementById('${id}');el.style.display=el.style.display==='none'?'block':'none';this.style.borderColor=el.style.display==='none'?'transparent':'rgba(139,92,246,0.3)'" onmouseover="this.style.background='rgba(0,0,0,0.18)'" onmouseout="this.style.background='rgba(0,0,0,0.12)'">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div><div style="color:var(--text-primary)">${title}</div>${sub ? `<div style="font-size:0.7rem;color:var(--text-secondary)">${sub}</div>` : ''}</div>
+                    <span style="font-size:0.65rem;color:var(--accent-purple)">▶ Chi tiết</span>
+                </div>
+                <div id="${id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);font-size:0.75rem;color:var(--text-secondary);white-space:pre-wrap;max-height:200px;overflow-y:auto">${detail}</div>
+            </div>`;
+        };
 
         const section = (icon, title, items, renderItem) => {
             if (!items.length) return `<div style="margin-top:12px"><strong>${icon} ${title}</strong> <span style="color:var(--text-secondary);font-size:0.8rem">— Chưa có</span></div>`;
@@ -2617,6 +2655,31 @@ async function showAdminUserDetail(userId) {
             <div style="color:var(--text-primary)">${text}</div>
             ${sub ? `<div style="font-size:0.7rem;color:var(--text-secondary)">${sub}</div>` : ''}
         </div>`;
+
+        // Render presets with expandable detail
+        const renderPreset = (p) => {
+            const dd = p.data || {};
+            const isCustom = dd.type === 'custom';
+            const chLabel = p.channelName ? `📺 ${p.channelName} · ` : '';
+            let detail = '';
+            if (isCustom) {
+                detail = `📝 Custom Rules:\n${dd.custom_rules || 'N/A'}`;
+            } else {
+                detail = `🎨 Style: ${dd.style_dna?.overall_style || 'N/A'}\n⭐ Score: ${dd.video_dna?.overall_score || 'N/A'}/100\n🥁 Tempo: ${dd.pacing_rhythm?.tempo || 'N/A'}\n🎭 Characters: ${dd.characters?.length || 0}`;
+                if (dd.characters?.length) detail += '\n' + dd.characters.map(c => `  - ${c.name}: ${c.role_in_video || ''}`).join('\n');
+            }
+            return expandCard(
+                `${isCustom ? '✍️' : '🧬'} ${p.name}`,
+                `${chLabel}${fmtDate(p.createdAt)}`,
+                detail
+            );
+        };
+
+        // Render characters with expandable detail
+        const renderChar = (c) => {
+            const detail = `👤 Tên: ${c.name}\n⚧ Giới tính: ${c.gender || 'N/A'}\n🎬 Vai trò: ${c.role_in_video || 'N/A'}\n👕 Ngoại hình: ${c.appearance || 'N/A'}\n💭 Tính cách: ${c.personality || 'N/A'}\n📝 Prompt: ${c.ref_prompt || 'N/A'}`;
+            return expandCard(c.name, `${c.gender || ''} • ${c.role_in_video || ''}`, detail);
+        };
 
         const html = `
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -2631,11 +2694,11 @@ async function showAdminUserDetail(userId) {
                 <div class="dna-card" style="padding:8px"><div style="font-size:1.3rem;font-weight:700;color:#3b82f6">${d.roadmaps.length}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Roadmaps</div></div>
             </div>
             ${section('📺', 'Kênh', d.channels, c => card(c.name, `${c.niche || ''} • ${c.language} • ${c.postsPerDay} video/ngày`))}
-            ${section('📂', 'Preset', d.presets, p => card(p.name, fmtDate(p.createdAt)))}
-            ${section('🎭', 'Nhân vật', d.characters, c => card(c.name, `${c.gender || ''} • ${c.role_in_video || ''}`))}
+            ${section('📂', 'Preset', d.presets, renderPreset)}
+            ${section('🎭', 'Nhân vật', d.characters, renderChar)}
             ${section('📝', 'Lịch sử tạo video', d.generationHistory, h => card(h.projectName || h.description?.substring(0, 40) || 'Video', `${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}`))}
             ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, h => card(h.filename || h.projectName || 'Video', `${h.clipCount || 0} clips • ${fmtDate(h.createdAt)}`))}
-            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => card(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/10' : ''}`, fmtDate(h.createdAt)))}
+            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => card(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/100' : ''}`, fmtDate(h.createdAt)))}
         `;
 
         document.getElementById('channelDetailTitle').textContent = `👤 ${u.name || u.username}`;
@@ -3189,6 +3252,7 @@ async function loadChannelsForGenerator() {
         const res = await fetch('/api/channels', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
         if (!res.ok) return;
         const channels = await res.json();
+        window._cachedChannels = channels;
         // Keep existing selected value
         const prev = sel.value;
         sel.innerHTML = '<option value="">-- Không chọn kênh --</option>' +
