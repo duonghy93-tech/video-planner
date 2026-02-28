@@ -1,3 +1,22 @@
+// ============ THEME ============
+function toggleTheme() {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    const btn = document.getElementById('themeToggle');
+    if (btn) btn.textContent = next === 'dark' ? '🌙' : '☀️';
+}
+(function () {
+    const saved = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('themeToggle');
+        if (btn) btn.textContent = saved === 'dark' ? '🌙' : '☀️';
+    });
+})();
+
 // ============ STATE ============
 let currentPlan = null;
 let currentReview = null;
@@ -2223,7 +2242,7 @@ let _adminChatLogs = [];
 
 async function loadAdminChatLogs() {
     try {
-        const res = await fetch('/api/admin/chat-logs', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        const res = await fetch('/api/admin/chat-logs', { headers: { 'Authorization': 'Bearer ' + getAuthToken(), 'x-api-key': getStoredApiKey() } });
         if (!res.ok) return;
         _adminChatLogs = await res.json();
 
