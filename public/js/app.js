@@ -316,6 +316,12 @@ async function handleTextGenerate() {
         const taskIdx = document.getElementById('roadmapTaskSelect')?.value;
         const roadmapTask = (taskIdx !== '' && window._generatorTasks) ? window._generatorTasks[parseInt(taskIdx)] : null;
 
+        // Gather selected characters
+        const selectedChars = (window._selectedCharacterIds || []).map(id => savedCharacters.find(c => c.id === id)).filter(Boolean).map(c => ({
+            name: c.name, gender: c.gender, role_in_video: c.role_in_video,
+            appearance: c.appearance, personality: c.personality, ref_prompt: c.ref_prompt
+        }));
+
         const res = await fetch('/api/analyze-text', {
             method: 'POST',
             headers: getApiHeaders(),
@@ -327,7 +333,8 @@ async function handleTextGenerate() {
                 channelId: channelId || undefined,
                 channelName: channelName || undefined,
                 roadmapTask: roadmapTask ? { title: roadmapTask.title, rmName: roadmapTask.rmName, day: roadmapTask.day } : undefined,
-                templateStyle: window._selectedTemplate?.name || undefined
+                templateStyle: window._selectedTemplate?.name || undefined,
+                characters: selectedChars.length ? selectedChars : undefined
             })
         });
 
@@ -1827,6 +1834,59 @@ async function loadCharacters() {
         console.error('Failed to load characters:', e);
     }
 }
+
+// Character picker for video creation
+window._selectedCharacterIds = [];
+
+function toggleCharPicker() {
+    const dd = document.getElementById('charPickerDropdown');
+    if (dd.style.display === 'none') {
+        dd.style.display = 'block';
+        dd.innerHTML = savedCharacters.length ? savedCharacters.map(ch => {
+            const checked = window._selectedCharacterIds.includes(ch.id) ? 'checked' : '';
+            const avatar = ch.imageUrl ? `<img src="${ch.imageUrl}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : (ch.gender === 'female' ? '👩' : '👨');
+            return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='rgba(139,92,246,0.1)'" onmouseout="this.style.background='transparent'">
+                <input type="checkbox" ${checked} onchange="toggleCharSelection('${ch.id}')" style="accent-color:#8b5cf6">
+                ${avatar}
+                <div>
+                    <div style="font-size:0.82rem;color:var(--text-primary)">${ch.name}</div>
+                    <div style="font-size:0.65rem;color:var(--text-secondary)">${ch.gender || ''} · ${ch.role_in_video || ''}</div>
+                </div>
+            </label>`;
+        }).join('') : '<p style="color:var(--text-secondary);font-size:0.8rem;text-align:center;padding:10px">Chưa có nhân vật. Bấm "📚 Thư viện" để thêm.</p>';
+    } else {
+        dd.style.display = 'none';
+    }
+}
+
+function toggleCharSelection(charId) {
+    const idx = window._selectedCharacterIds.indexOf(charId);
+    if (idx >= 0) window._selectedCharacterIds.splice(idx, 1);
+    else window._selectedCharacterIds.push(charId);
+    refreshCharPickerDisplay();
+}
+
+function refreshCharPickerDisplay() {
+    const area = document.getElementById('charPickerArea');
+    const empty = document.getElementById('charPickerEmpty');
+    if (!window._selectedCharacterIds.length) {
+        if (empty) empty.style.display = 'inline';
+        area.querySelectorAll('.char-pick-tag').forEach(el => el.remove());
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    area.querySelectorAll('.char-pick-tag').forEach(el => el.remove());
+    window._selectedCharacterIds.forEach(id => {
+        const ch = savedCharacters.find(c => c.id === id);
+        if (!ch) return;
+        const tag = document.createElement('span');
+        tag.className = 'char-pick-tag';
+        tag.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);border-radius:12px;font-size:0.75rem;color:var(--accent-purple)';
+        const avatar = ch.imageUrl ? `<img src="${ch.imageUrl}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : (ch.gender === 'female' ? '👩' : '👨');
+        tag.innerHTML = `${avatar} ${ch.name} <span style="cursor:pointer;margin-left:2px" onclick="toggleCharSelection('${ch.id}');this.parentElement.remove()">✕</span>`;
+        area.appendChild(tag);
+    });
+}
 async function saveCharactersFromDNA() {
     if (!currentDNA || !currentDNA.characters || !currentDNA.characters.length) {
         showToast('⚠️ Không có nhân vật trong DNA');
@@ -1928,7 +1988,6 @@ function openCharacterLibrary() {
     const modal = document.getElementById('characterLibraryModal');
     const body = document.getElementById('characterLibraryBody');
 
-    // Add character form at top
     let addFormHtml = `
         <div class="dna-card" style="margin-bottom:16px;border:1px dashed var(--accent-purple);padding:14px">
             <h4 style="margin:0 0 8px">➕ Thêm Nhân Vật Mới</h4>
@@ -1952,7 +2011,7 @@ function openCharacterLibrary() {
                 ${savedCharacters.map(ch => `
                     <div class="char-lib-card">
                         <div class="char-lib-header">
-                            <span class="char-lib-avatar">${ch.gender === 'female' ? '👩' : '👨'}</span>
+                            ${ch.imageUrl ? `<img src="${ch.imageUrl}" class="char-lib-avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover">` : `<span class="char-lib-avatar">${ch.gender === 'female' ? '👩' : '👨'}</span>`}
                             <div>
                                 <div class="char-lib-name">${ch.name}</div>
                                 <div class="char-lib-meta">${ch.gender || ''} · ${ch.role_in_video || ''}</div>
@@ -2001,23 +2060,103 @@ async function addNewCharacter() {
 async function editCharacter(charId) {
     const ch = savedCharacters.find(c => c.id === charId);
     if (!ch) return;
-    const newName = prompt('Tên nhân vật:', ch.name);
-    if (newName === null) return;
-    const newAppearance = prompt('Ngoại hình:', ch.appearance || '');
-    if (newAppearance === null) return;
-    const newPersonality = prompt('Tính cách:', ch.personality || '');
-    if (newPersonality === null) return;
-    const newRefPrompt = prompt('Ref prompt:', ch.ref_prompt || '');
-    if (newRefPrompt === null) return;
+    const modal = document.getElementById('channelDetailModal');
+    const fld = (label, id, val, type = 'input') => {
+        const inputStyle = 'width:100%;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border-light);border-radius:8px;color:var(--text-primary);font-size:0.85rem;font-family:var(--font-sans)';
+        if (type === 'textarea') return `<div style="margin-bottom:8px"><label style="font-size:0.75rem;color:var(--text-secondary);display:block;margin-bottom:2px">${label}</label><textarea id="${id}" rows="3" style="${inputStyle};resize:vertical">${val || ''}</textarea></div>`;
+        return `<div style="margin-bottom:8px"><label style="font-size:0.75rem;color:var(--text-secondary);display:block;margin-bottom:2px">${label}</label><input id="${id}" value="${(val || '').replace(/"/g, '&quot;')}" style="${inputStyle}"></div>`;
+    };
+    document.getElementById('channelDetailTitle').textContent = '✏️ Sửa Nhân Vật: ' + ch.name;
+    document.getElementById('channelDetailBody').innerHTML = `
+        <div style="max-width:500px;margin:0 auto">
+            <div style="text-align:center;margin-bottom:16px">
+                <div id="editCharImg" style="width:120px;height:120px;border-radius:50%;margin:0 auto 10px;overflow:hidden;border:3px solid var(--accent-purple);display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.15);font-size:3rem">
+                    ${ch.imageUrl ? `<img src="${ch.imageUrl}" style="width:100%;height:100%;object-fit:cover">` : (ch.gender === 'female' ? '👩' : '👨')}
+                </div>
+                <div style="display:flex;gap:8px;justify-content:center">
+                    <label class="btn-dna-save" style="padding:6px 14px;font-size:0.8rem;cursor:pointer">
+                        📤 Upload ảnh
+                        <input type="file" accept="image/*" style="display:none" onchange="uploadCharImage('${ch.id}', this.files[0])">
+                    </label>
+                    <button class="btn-dna-copy" style="padding:6px 14px;font-size:0.8rem" onclick="aiGenerateCharImage('${ch.id}')">🎨 AI tạo ảnh</button>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                ${fld('Tên', 'editCharName', ch.name)}
+                ${fld('Giới tính', 'editCharGender', ch.gender)}
+            </div>
+            ${fld('Vai trò', 'editCharRole', ch.role_in_video)}
+            ${fld('Ngoại hình', 'editCharAppearance', ch.appearance, 'textarea')}
+            ${fld('Tính cách', 'editCharPersonality', ch.personality, 'textarea')}
+            ${fld('Trang phục', 'editCharClothing', ch.clothing, 'textarea')}
+            ${fld('Prompt tạo ảnh (ref_prompt)', 'editCharRefPrompt', ch.ref_prompt, 'textarea')}
+            <div style="display:flex;gap:8px;margin-top:12px">
+                <button class="btn-dna-save" style="flex:1;padding:10px" onclick="saveEditedCharacter('${ch.id}')">💾 Lưu thay đổi</button>
+                <button class="btn-dna-copy" style="padding:10px" onclick="document.getElementById('channelDetailModal').classList.remove('active');openCharacterLibrary()">Hủy</button>
+            </div>
+        </div>`;
+    modal.classList.add('active');
+}
+
+async function uploadCharImage(charId, file) {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+        showToast('📤 Đang upload ảnh...');
+        const res = await fetch(`/api/characters/${charId}/upload-image`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() },
+            body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        document.getElementById('editCharImg').innerHTML = `<img src="${data.imageUrl}" style="width:100%;height:100%;object-fit:cover">`;
+        await loadCharacters();
+        showToast('✅ Đã upload ảnh nhân vật!');
+    } catch (err) { showToast('❌ ' + err.message); }
+}
+
+async function aiGenerateCharImage(charId) {
+    const prompt = document.getElementById('editCharRefPrompt')?.value || '';
+    if (!prompt) { showToast('⚠️ Nhập ref_prompt trước để AI tạo ảnh'); return; }
+    try {
+        document.getElementById('editCharImg').innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div class="mini-spinner"></div><span style="font-size:0.7rem;color:var(--text-secondary)">AI đang tạo ảnh...</span></div>';
+        const res = await fetch(`/api/characters/${charId}/generate-image`, {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ prompt })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        document.getElementById('editCharImg').innerHTML = `<img src="${data.imageUrl}" style="width:100%;height:100%;object-fit:cover">`;
+        await loadCharacters();
+        showToast('✅ AI đã tạo ảnh nhân vật!');
+    } catch (err) {
+        document.getElementById('editCharImg').innerHTML = '❌';
+        showToast('❌ ' + err.message);
+    }
+}
+
+async function saveEditedCharacter(charId) {
     try {
         const res = await fetch('/api/characters/' + charId, {
             method: 'PUT',
             headers: getApiHeaders(),
-            body: JSON.stringify({ name: newName, appearance: newAppearance, personality: newPersonality, ref_prompt: newRefPrompt })
+            body: JSON.stringify({
+                name: document.getElementById('editCharName')?.value,
+                gender: document.getElementById('editCharGender')?.value,
+                role_in_video: document.getElementById('editCharRole')?.value,
+                appearance: document.getElementById('editCharAppearance')?.value,
+                personality: document.getElementById('editCharPersonality')?.value,
+                clothing: document.getElementById('editCharClothing')?.value,
+                ref_prompt: document.getElementById('editCharRefPrompt')?.value
+            })
         });
         if (!res.ok) throw new Error((await res.json()).error);
-        showToast('✅ Đã cập nhật: ' + newName);
+        showToast('✅ Đã cập nhật nhân vật!');
         await loadCharacters();
+        document.getElementById('channelDetailModal').classList.remove('active');
         openCharacterLibrary();
     } catch (err) { showToast('❌ ' + err.message); }
 }
@@ -2822,42 +2961,35 @@ async function showAdminUserDetail(userId) {
             if (dayCount > 5) detail += `\n\n... và ${dayCount - 5} ngày nữa`;
             return expandCard(`🗺️ ${r.channelName || 'Roadmap'}`, `${dayCount} ngày • ${totalSlots} slots • ${fmtDate(r.createdAt)}`, detail);
         })}
-            ${section('📝', 'Lịch sử tạo video', d.generationHistory, h => {
-            let detail = `📋 Dự án: ${h.projectName || h.description || 'N/A'}\n🎬 Clips: ${h.clipCount || 0} • ⏱ ${h.duration || 0}s\n📺 Kênh: ${h.channelName || 'N/A'}\n📂 Preset: ${h.presetName || 'N/A'}\n🎨 Style: ${h.templateStyle || 'N/A'}\n🌐 Ngôn ngữ: ${h.langFormat || 'N/A'}`;
-            if (h.plan?.clips?.length) {
-                detail += '\n\n🎬 Danh sách clips:';
-                h.plan.clips.forEach((c, i) => { detail += `\n  ${i + 1}. ${c.image_prompt?.substring(0, 60) || c.description?.substring(0, 60) || 'Clip'}...`; });
-            }
-            return expandCard(h.projectName || h.description?.substring(0, 40) || 'Video', `${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}`, detail);
+            ${section('📝', 'Lịch sử tạo video', d.generationHistory, (h, i) => {
+            window._adminDetailData = window._adminDetailData || {};
+            window._adminDetailData['gen_' + i] = h;
+            return `<div style="padding:8px 10px;background:rgba(0,0,0,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;transition:all 0.2s" onclick="adminViewFullDetail('gen_${i}','plan')" onmouseover="this.style.background='rgba(0,0,0,0.18)'" onmouseout="this.style.background='rgba(0,0,0,0.12)'">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div><div style="color:var(--text-primary)">${h.projectName || h.description?.substring(0, 40) || 'Video'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">${h.clipCount || 0} clips • ${h.duration || 0}s • ${fmtDate(h.createdAt)}</div></div>
+                        <span style="font-size:0.65rem;color:var(--accent-purple)">▶ Xem full</span>
+                    </div></div>`;
         })}
-            ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, h => {
+            ${section('🔬', 'Lịch sử phân tích', d.analysisHistory, (h, i) => {
+            window._adminDetailData = window._adminDetailData || {};
+            window._adminDetailData['ana_' + i] = h;
             const isDNA = h.type === 'dna';
-            let detail = isDNA
-                ? `🧬 DNA: ${h.title || 'N/A'}\n⭐ Điểm: ${h.overallScore || 'N/A'}/100\n📅 ${fmtDate(h.createdAt)}`
-                : `📹 Video: ${h.filename || 'N/A'}\n🎬 Clips: ${h.clipCount || 0}\n📅 ${fmtDate(h.createdAt)}`;
-            if (isDNA && h.plan) {
-                const p = h.plan;
-                if (p.style_dna?.overall_style) detail += `\n🎨 Style: ${p.style_dna.overall_style}`;
-                if (p.characters?.length) detail += `\n🎭 Nhân vật: ${p.characters.map(c => c.name).join(', ')}`;
-                if (p.content_formula?.structure) detail += `\n📐 Cấu trúc: ${p.content_formula.structure}`;
-            } else if (h.plan?.clips?.length) {
-                detail += '\n\n🎬 Clips:';
-                h.plan.clips.slice(0, 5).forEach((c, i) => { detail += `\n  ${i + 1}. [${c.start_time || ''}] ${c.description?.substring(0, 60) || ''}`; });
-            }
             const label = isDNA ? `🧬 ${h.title || h.filename || 'DNA'}` : `📹 ${h.filename || 'Video'}`;
             const scoreTxt = h.overallScore ? ` ⭐${h.overallScore}/100` : '';
-            return expandCard(`${label}${scoreTxt}`, `${h.clipCount ? h.clipCount + ' clips • ' : ''}${fmtDate(h.createdAt)}`, detail);
+            return `<div style="padding:8px 10px;background:rgba(0,0,0,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;transition:all 0.2s" onclick="adminViewFullDetail('ana_${i}','${isDNA ? 'dna' : 'analysis'}')" onmouseover="this.style.background='rgba(0,0,0,0.18)'" onmouseout="this.style.background='rgba(0,0,0,0.12)'">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div><div style="color:var(--text-primary)">${label}${scoreTxt}</div><div style="font-size:0.7rem;color:var(--text-secondary)">${h.clipCount ? h.clipCount + ' clips • ' : ''}${fmtDate(h.createdAt)}</div></div>
+                        <span style="font-size:0.65rem;color:var(--accent-purple)">▶ Xem full</span>
+                    </div></div>`;
         })}
-            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, h => {
-            let detail = `📹 Video: ${h.filename || 'N/A'}\n⭐ Điểm: ${h.overallScore || 'N/A'}/100\n📅 ${fmtDate(h.createdAt)}`;
-            if (h.review) {
-                const r = h.review;
-                if (r.overall_score) detail += `\n\n📊 Điểm chi tiết:\n  Hook: ${r.hook_score || 'N/A'}/10\n  Visual: ${r.visual_score || 'N/A'}/10\n  Audio: ${r.audio_score || 'N/A'}/10\n  Pacing: ${r.pacing_score || 'N/A'}/10`;
-                if (r.strengths?.length) detail += `\n\n✅ Điểm mạnh:\n${r.strengths.map(s => '  • ' + s).join('\n')}`;
-                if (r.weaknesses?.length) detail += `\n\n⚠️ Điểm yếu:\n${r.weaknesses.map(w => '  • ' + w).join('\n')}`;
-                if (r.suggestions?.length) detail += `\n\n💡 Đề xuất:\n${r.suggestions.map(s => '  • ' + s).join('\n')}`;
-            }
-            return expandCard(`${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/100' : ''}`, fmtDate(h.createdAt), detail);
+            ${section('⭐', 'Lịch sử đánh giá', d.reviewHistory, (h, i) => {
+            window._adminDetailData = window._adminDetailData || {};
+            window._adminDetailData['rev_' + i] = h;
+            return `<div style="padding:8px 10px;background:rgba(0,0,0,0.12);border-radius:6px;font-size:0.82rem;cursor:pointer;transition:all 0.2s" onclick="adminViewFullDetail('rev_${i}','review')" onmouseover="this.style.background='rgba(0,0,0,0.18)'" onmouseout="this.style.background='rgba(0,0,0,0.12)'">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div><div style="color:var(--text-primary)">${h.filename || 'Video'} ${h.overallScore ? '⭐' + h.overallScore + '/100' : ''}</div><div style="font-size:0.7rem;color:var(--text-secondary)">${fmtDate(h.createdAt)}</div></div>
+                        <span style="font-size:0.65rem;color:var(--accent-purple)">▶ Xem full</span>
+                    </div></div>`;
         })}
         `;
 
@@ -2866,6 +2998,69 @@ async function showAdminUserDetail(userId) {
         document.getElementById('channelDetailModal').classList.add('active');
     } catch (err) {
         showToast('❌ ' + err.message);
+    }
+}
+
+// Admin full-render modal: shows history items exactly like user view
+function adminViewFullDetail(key, type) {
+    const data = window._adminDetailData?.[key];
+    if (!data) { showToast('⚠️ Không có dữ liệu'); return; }
+
+    const modal = document.getElementById('channelDetailModal');
+    const body = document.getElementById('channelDetailBody');
+    const title = document.getElementById('channelDetailTitle');
+
+    if (type === 'plan' && data.plan) {
+        title.textContent = '📝 ' + (data.projectName || 'Video Plan');
+        body.innerHTML = '<div id="adminRenderTarget"></div>';
+        modal.classList.add('active');
+        setTimeout(() => renderPlan(data.plan, 'adminRenderTarget'), 100);
+    } else if (type === 'dna' && data.plan) {
+        title.textContent = '🧬 ' + (data.title || 'DNA Video');
+        body.innerHTML = '<div id="adminRenderTarget"></div>';
+        modal.classList.add('active');
+        setTimeout(() => renderDNAResults(data.plan, 'adminRenderTarget'), 100);
+    } else if (type === 'analysis' && data.plan) {
+        title.textContent = '📹 ' + (data.filename || 'Phân Tích Video');
+        body.innerHTML = '<div id="adminRenderTarget"></div>';
+        modal.classList.add('active');
+        setTimeout(() => renderPlan(data.plan, 'adminRenderTarget'), 100);
+    } else if (type === 'review') {
+        const review = data.review || data;
+        title.textContent = '⭐ Review: ' + (data.filename || 'Video');
+        let html = '<div style="max-width:700px;margin:0 auto">';
+        if (review.overall_score || data.overallScore) {
+            const score = review.overall_score || data.overallScore;
+            html += `<div style="text-align:center;margin-bottom:20px">
+                <div style="font-size:3rem;font-weight:700;color:${score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'}">${score}</div>
+                <div style="font-size:0.9rem;color:var(--text-secondary)">/ 100 điểm</div>
+            </div>`;
+        }
+        if (review.hook_score || review.visual_score) {
+            html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+                <div class="dna-card" style="padding:10px;text-align:center"><div style="font-size:1.2rem;font-weight:600;color:#8b5cf6">${review.hook_score || '-'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Hook</div></div>
+                <div class="dna-card" style="padding:10px;text-align:center"><div style="font-size:1.2rem;font-weight:600;color:#3b82f6">${review.visual_score || '-'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Visual</div></div>
+                <div class="dna-card" style="padding:10px;text-align:center"><div style="font-size:1.2rem;font-weight:600;color:#10b981">${review.audio_score || '-'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Audio</div></div>
+                <div class="dna-card" style="padding:10px;text-align:center"><div style="font-size:1.2rem;font-weight:600;color:#f59e0b">${review.pacing_score || '-'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Pacing</div></div>
+            </div>`;
+        }
+        if (review.strengths?.length) {
+            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 6px;color:#10b981">✅ Điểm mạnh</h4><ul style="margin:0;padding-left:18px">' + review.strengths.map(s => `<li style="margin:4px 0;font-size:0.85rem">${s}</li>`).join('') + '</ul></div>';
+        }
+        if (review.weaknesses?.length) {
+            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 6px;color:#f59e0b">⚠️ Điểm yếu</h4><ul style="margin:0;padding-left:18px">' + review.weaknesses.map(w => `<li style="margin:4px 0;font-size:0.85rem">${w}</li>`).join('') + '</ul></div>';
+        }
+        if (review.suggestions?.length) {
+            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 6px;color:#3b82f6">💡 Đề xuất</h4><ul style="margin:0;padding-left:18px">' + review.suggestions.map(s => `<li style="margin:4px 0;font-size:0.85rem">${s}</li>`).join('') + '</ul></div>';
+        }
+        if (review.summary) {
+            html += `<div class="dna-card" style="padding:12px"><h4 style="margin:0 0 6px">📝 Tóm tắt</h4><p style="font-size:0.85rem;color:var(--text-secondary);margin:0">${review.summary}</p></div>`;
+        }
+        html += '</div>';
+        body.innerHTML = html;
+        modal.classList.add('active');
+    } else {
+        showToast('⚠️ Không có dữ liệu chi tiết để hiện');
     }
 }
 

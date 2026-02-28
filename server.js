@@ -1143,7 +1143,7 @@ function downloadDirect(url) {
 // POST /api/analyze-text — Generate plan from text
 app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()), async (req, res) => {
     try {
-        const { description, duration, langFormat, presetId } = req.body;
+        const { description, duration, langFormat, presetId, characters } = req.body;
         if (!description || !duration) {
             return res.status(400).json({ error: 'Missing description or duration' });
         }
@@ -1161,9 +1161,20 @@ app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()),
             }
         }
 
-        console.log(`[analyze-text] "${description.substring(0, 50)}..." duration: ${duration}s, lang: ${langFormat || 'VN'}${preset ? ', with preset' : ''}`);
+        // Append selected characters to description
+        let fullDesc = description;
+        if (characters && characters.length) {
+            fullDesc += '\n\n[CHARACTERS TO USE IN THIS VIDEO - MUST use these exact characters with their described appearance and personality]:\n';
+            characters.forEach((ch, i) => {
+                fullDesc += `Character ${i + 1}: "${ch.name}" - Gender: ${ch.gender || 'N/A'}, Role: ${ch.role_in_video || 'main'}, Appearance: ${ch.appearance || 'N/A'}, Personality: ${ch.personality || 'N/A'}`;
+                if (ch.ref_prompt) fullDesc += `, ImagePrompt: ${ch.ref_prompt}`;
+                fullDesc += '\n';
+            });
+        }
 
-        const plan = await gemini.generatePlan(description, parseInt(duration), langFormat || 'VN', preset);
+        console.log(`[analyze-text] "${description.substring(0, 50)}..." duration: ${duration}s, lang: ${langFormat || 'VN'}${preset ? ', with preset' : ''}${characters?.length ? `, with ${characters.length} characters` : ''}`);
+
+        const plan = await gemini.generatePlan(fullDesc, parseInt(duration), langFormat || 'VN', preset);
 
         const projectName = plan.project_name || 'text_project';
         const planDir = path.join(outputDir, projectName + '_' + Date.now());
@@ -1999,7 +2010,7 @@ app.put('/api/characters/:id', auth.authMiddleware, (req, res) => {
         const chars = readJsonFile(CHARACTERS_FILE) || [];
         const char = chars.find(c => c.id === req.params.id && (c.userId === req.user.id || req.user.role === 'admin'));
         if (!char) return res.status(404).json({ error: 'Not found' });
-        const { name, gender, role_in_video, appearance, personality, ref_prompt, backstory, voiceStyle } = req.body;
+        const { name, gender, role_in_video, appearance, personality, ref_prompt, backstory, voiceStyle, clothing, imageUrl } = req.body;
         if (name !== undefined) char.name = name;
         if (gender !== undefined) char.gender = gender;
         if (role_in_video !== undefined) char.role_in_video = role_in_video;
@@ -2008,10 +2019,62 @@ app.put('/api/characters/:id', auth.authMiddleware, (req, res) => {
         if (ref_prompt !== undefined) char.ref_prompt = ref_prompt;
         if (backstory !== undefined) char.backstory = backstory;
         if (voiceStyle !== undefined) char.voiceStyle = voiceStyle;
+        if (clothing !== undefined) char.clothing = clothing;
+        if (imageUrl !== undefined) char.imageUrl = imageUrl;
         char.updatedAt = new Date().toISOString();
         writeJsonFile(CHARACTERS_FILE, chars);
         console.log(`[characters] Updated: ${char.name}`);
         res.json({ success: true, character: char });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/characters/:id/upload-image — Upload avatar image for character
+app.post('/api/characters/:id/upload-image', auth.authMiddleware, upload.single('image'), (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+        const chars = readJsonFile(CHARACTERS_FILE) || [];
+        const char = chars.find(c => c.id === req.params.id && (c.userId === req.user.id || req.user.role === 'admin'));
+        if (!char) return res.status(404).json({ error: 'Character not found' });
+
+        const imgDir = path.join(outputDir, 'characters');
+        if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
+        const ext = path.extname(req.file.originalname) || '.png';
+        const filename = `${char.id}_${Date.now()}${ext}`;
+        const filePath = path.join(imgDir, filename);
+        fs.writeFileSync(filePath, req.file.buffer);
+
+        const relativePath = '/' + path.relative(__dirname, filePath).replace(/\\/g, '/');
+        char.imageUrl = relativePath;
+        char.updatedAt = new Date().toISOString();
+        writeJsonFile(CHARACTERS_FILE, chars);
+
+        console.log(`[characters] Image uploaded for ${char.name}: ${relativePath}`);
+        res.json({ success: true, imageUrl: relativePath });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/characters/:id/generate-image — AI generate avatar 
+app.post('/api/characters/:id/generate-image', auth.authMiddleware, async (req, res) => {
+    try {
+        const chars = readJsonFile(CHARACTERS_FILE) || [];
+        const char = chars.find(c => c.id === req.params.id && (c.userId === req.user.id || req.user.role === 'admin'));
+        if (!char) return res.status(404).json({ error: 'Character not found' });
+
+        const prompt = req.body.prompt || char.ref_prompt || `Character portrait: ${char.name}, ${char.appearance || ''}`;
+        const imgDir = path.join(outputDir, 'characters');
+        if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
+        const outputPath = path.join(imgDir, `${char.id}_${Date.now()}`);
+
+        const result = await gemini.generateImage(prompt, outputPath);
+        if (!result.success) return res.status(500).json({ error: result.error });
+
+        const relativePath = '/' + path.relative(__dirname, result.path).replace(/\\/g, '/');
+        char.imageUrl = relativePath;
+        char.updatedAt = new Date().toISOString();
+        writeJsonFile(CHARACTERS_FILE, chars);
+
+        console.log(`[characters] AI image generated for ${char.name}: ${relativePath}`);
+        res.json({ success: true, imageUrl: relativePath });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

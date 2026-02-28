@@ -1,0 +1,434 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta name="ProgId" content="Word.Document">
+<meta name="Generator" content="Microsoft Word 15">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; line-height: 1.6; color: #222; }
+  h1 { font-size: 28pt; color: #6d28d9; text-align: center; border-bottom: 3px solid #6d28d9; padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { font-size: 18pt; color: #6d28d9; margin-top: 30px; border-left: 4px solid #6d28d9; padding-left: 12px; }
+  h3 { font-size: 14pt; color: #4338ca; margin-top: 20px; }
+  h4 { font-size: 12pt; color: #555; margin-top: 14px; }
+  p { margin: 6px 0; font-size: 11pt; }
+  .subtitle { text-align: center; font-size: 13pt; color: #666; margin-bottom: 30px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th { background: #6d28d9; color: white; padding: 8px 12px; text-align: left; font-size: 10pt; }
+  td { border: 1px solid #ddd; padding: 8px 12px; font-size: 10pt; vertical-align: top; }
+  tr:nth-child(even) { background: #f8f5ff; }
+  .tip { background: #f0fdf4; border-left: 4px solid #10b981; padding: 10px 14px; margin: 10px 0; border-radius: 0 6px 6px 0; font-size: 10pt; }
+  .warning { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 10px 0; border-radius: 0 6px 6px 0; font-size: 10pt; }
+  .step { background: #f5f3ff; border: 1px solid #ddd5f9; padding: 10px 14px; margin: 8px 0; border-radius: 6px; }
+  .step b { color: #6d28d9; }
+  ol, ul { margin: 6px 0 6px 20px; }
+  li { margin: 4px 0; font-size: 10.5pt; }
+  .page-break { page-break-before: always; }
+  .footer { text-align: center; margin-top: 40px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 9pt; color: #999; }
+</style>
+</head>
+<body>
+
+<h1>📹 Hướng Dẫn Sử Dụng Video Planner</h1>
+<p class="subtitle">Phiên bản 3.1 — Cập nhật: 28/02/2026</p>
+<p class="subtitle">Công cụ AI hỗ trợ lên kế hoạch, phân tích, đánh giá video &amp; quản lý kênh</p>
+
+<hr>
+
+<h2>📋 Mục Lục</h2>
+<ol>
+  <li><a href="#dang-nhap">Đăng Nhập &amp; Giao Diện Chính</a></li>
+  <li><a href="#tao-video">Tạo Video từ Mô Tả</a></li>
+  <li><a href="#phan-tich">Phân Tích Video (DNA)</a></li>
+  <li><a href="#danh-gia">Đánh Giá Video</a></li>
+  <li><a href="#kenh">Kênh Của Tôi &amp; Strategy Chat</a></li>
+  <li><a href="#roadmap">Roadmap Nội Dung</a></li>
+  <li><a href="#ho-so">Hồ Sơ &amp; Lịch Sử</a></li>
+  <li><a href="#preset">Quản Lý Preset</a></li>
+  <li><a href="#nhan-vat">Quản Lý Nhân Vật</a></li>
+  <li><a href="#chatbot">AI Chatbot Hỗ Trợ</a></li>
+  <li><a href="#meo">Mẹo &amp; Xử Lý Lỗi</a></li>
+</ol>
+
+<hr>
+
+<!-- 1. ĐĂNG NHẬP -->
+<h2 id="dang-nhap">1. 🔐 Đăng Nhập &amp; Giao Diện Chính</h2>
+
+<h3>1.1 Đăng nhập</h3>
+<div class="step">
+  <b>Bước 1:</b> Truy cập địa chỉ website do admin cung cấp<br>
+  <b>Bước 2:</b> Nhập <b>Username</b> + <b>Password</b><br>
+  <b>Bước 3:</b> Bấm <b>Đăng Nhập</b>
+</div>
+
+<h3>1.2 Giao diện chính</h3>
+<p>Sau khi đăng nhập, bạn thấy <b>6 tab</b> chính:</p>
+<table>
+  <tr><th>Tab</th><th>Chức năng</th></tr>
+  <tr><td>✏️ Tạo Từ Mô Tả</td><td>Tạo kế hoạch video từ ý tưởng văn bản</td></tr>
+  <tr><td>🔬 Phân Tích Video</td><td>Phân tích DNA video (upload hoặc URL)</td></tr>
+  <tr><td>⭐ Đánh Giá Video</td><td>AI chấm điểm chất lượng video</td></tr>
+  <tr><td>📺 Kênh Của Tôi</td><td>Quản lý kênh, chiến lược, brief</td></tr>
+  <tr><td>👤 Hồ Sơ</td><td>Tài khoản, lịch sử, thống kê cá nhân</td></tr>
+</table>
+<p><b>Thanh trên cùng:</b> Tên user, trạng thái API (🟢 sẵn sàng / 🔴 lỗi), nút đổi theme sáng/tối.</p>
+<p><b>Góc phải dưới:</b> Nút 💬 mở <b>AI Chatbot</b> hỗ trợ.</p>
+
+<!-- 2. TẠO VIDEO -->
+<div class="page-break"></div>
+<h2 id="tao-video">2. 🎬 Tạo Video từ Mô Tả</h2>
+<p>AI tạo kế hoạch nội dung video chi tiết: image prompt, text overlay, voice, sound, transition cho từng clip 8 giây.</p>
+
+<h3>2.1 Thiết lập</h3>
+<div class="step">
+  <b>Bước 1:</b> Tab <b>"Tạo Từ Mô Tả"</b><br>
+  <b>Bước 2:</b> Chọn <b>Preset</b> — phong cách (tùy chọn, xem mục 8)<br>
+  <b>Bước 3:</b> Chọn <b>Kênh</b> — gắn video vào kênh nào (tùy chọn)<br>
+  <b>Bước 4:</b> Chọn <b>Template</b> — định dạng sẵn:<br>
+  <table>
+    <tr><th>Template</th><th>Mô tả</th><th>Thời lượng</th></tr>
+    <tr><td>🍳 Cinematic Food</td><td>Quay cận cảnh đồ ăn, phong cách điện ảnh</td><td>24s</td></tr>
+    <tr><td>😂 Roast / Comedy</td><td>Hài hước, roast, nhanh</td><td>24s</td></tr>
+    <tr><td>📖 Tutorial Step-by-Step</td><td>Hướng dẫn từng bước</td><td>32s</td></tr>
+    <tr><td>🎧 ASMR Soothing</td><td>ASMR, thỏa mãn, satisfying</td><td>24s</td></tr>
+    <tr><td>✨ Before / After</td><td>Trước sau, transformation</td><td>16s</td></tr>
+    <tr><td>⭐ Product Review</td><td>Review sản phẩm, unboxing</td><td>32s</td></tr>
+    <tr><td>📖 Storytelling</td><td>Kể chuyện, narrative</td><td>40s</td></tr>
+    <tr><td>📊 Data Visual</td><td>Trình bày số liệu</td><td>24s</td></tr>
+    <tr><td>⚡ Quick Tips</td><td>Mẹo nhanh</td><td>16s</td></tr>
+    <tr><td>🎬 Skit / Mini Movie</td><td>Phim ngắn, tiểu phẩm</td><td>32s</td></tr>
+    <tr><td>🧑‍🤝‍🧑 POV / Relatable</td><td>Point-of-view, relate</td><td>24s</td></tr>
+    <tr><td>⚔️ VS / Comparison</td><td>So sánh A vs B</td><td>24s</td></tr>
+  </table>
+  <b>Bước 5:</b> Nhập <b>mô tả ý tưởng</b> video vào ô lớn<br>
+  <b>Bước 6:</b> Thiết lập:<br>
+  <ul>
+    <li>⏱ <b>Thời lượng:</b> 15s, 24s, 30s, 60s (= số clips × 8s)</li>
+    <li>📐 <b>Tỉ lệ:</b> 9:16 (TikTok/Reels), 16:9 (YouTube), 1:1 (Square)</li>
+    <li>🎨 <b>Engine tạo ảnh:</b> Imagen 4 (chất lượng cao), Flux, Midjourney</li>
+    <li>🌐 <b>Ngôn ngữ:</b> VN (tiếng Việt), US (tiếng Anh)...</li>
+  </ul>
+  <b>Bước 7:</b> Bấm <b>"🎬 Lên Kế Hoạch &amp; Tạo Video"</b>
+</div>
+
+<h3>2.2 Kết quả</h3>
+<p>AI trả về kế hoạch gồm:</p>
+<ul>
+  <li><b>Thông tin chung:</b> Tên dự án, mô tả, thời gian, số clips</li>
+  <li><b>Nhân vật:</b> Danh sách character với ngoại hình, tính cách → bấm "Tạo ảnh" để AI vẽ</li>
+  <li><b>Từng Clip:</b> Image prompt, text overlay, voice-over, sound effect, transition</li>
+</ul>
+
+<h3>2.3 Tạo ảnh cho video</h3>
+<div class="step">
+  <b>Tạo ảnh nhân vật:</b> Bấm <b>"🎨 Tạo ảnh"</b> trên mỗi nhân vật → AI generate ảnh 1:1<br>
+  <b>Tạo ảnh clip:</b> Bấm <b>"🎨 Tạo ảnh"</b> trên mỗi clip → AI generate ảnh theo prompt<br>
+  <b>Tạo tất cả:</b> Bấm <b>"🎨 Tạo Tất Cả Ảnh"</b> → generate toàn bộ<br>
+  <b>Tạo ref images:</b> Bấm <b>"📐 Tạo pose/cảnh ref"</b> → ảnh tham khảo bố cục
+</div>
+<div class="tip">
+  💡 <b>Mẹo:</b> Ảnh nhân vật nên tạo trước → ảnh clip sẽ nhất quán hơn.
+</div>
+
+<!-- 3. PHÂN TÍCH VIDEO -->
+<div class="page-break"></div>
+<h2 id="phan-tich">3. 🧬 Phân Tích Video (DNA)</h2>
+<p>"Giải mã" video thành công để học phong cách → tạo video tương tự.</p>
+
+<h3>3.1 Phân tích từ File</h3>
+<div class="step">
+  <b>Bước 1:</b> Tab <b>"Phân Tích Video"</b> → kéo thả file video (MP4, WebM, MOV, tối đa 50MB)<br>
+  <b>Bước 2:</b> Chọn ngôn ngữ phân tích<br>
+  <b>Bước 3a:</b> Bấm <b>"🔍 Phân Tích Video"</b> — phân tích cơ bản (clips, text, voiceover)<br>
+  <b>Bước 3b:</b> Bấm <b>"🧬 Phân Tích DNA Video"</b> — phân tích sâu (style, formula, nhân vật, pacing)
+</div>
+
+<h3>3.2 Phân tích từ URL</h3>
+<div class="step">
+  <b>Bước 1:</b> Paste link video (YouTube, TikTok, Facebook, Instagram, X) vào ô URL<br>
+  <b>Bước 2:</b> Bấm <b>"🧬 DNA từ URL"</b><br>
+  <b>Bước 3:</b> Đợi 1-3 phút (AI tải video + phân tích)
+</div>
+
+<h3>3.3 Kết quả DNA</h3>
+<table>
+  <tr><th>Mục</th><th>Nội dung</th></tr>
+  <tr><td>⭐ Scores</td><td>Tổng điểm, Viral score, Production score</td></tr>
+  <tr><td>🔥 Điểm Đáng Ăn Tiền</td><td>Từng đoạn hay: hook, transition, CTA — với timestamp + rating ⭐</td></tr>
+  <tr><td>🎨 Style DNA</td><td>Phong cách, màu sắc, filter, ánh sáng, typography</td></tr>
+  <tr><td>🎤 Voice &amp; Sound</td><td>Giọng nói, nhạc, hiệu ứng âm thanh</td></tr>
+  <tr><td>🎭 Nhân Vật</td><td>Tên, ngoại hình, tính cách, vai trò — có nút <b>"💾 Lưu"</b> từng nhân vật</td></tr>
+  <tr><td>📐 Content Formula</td><td>Cấu trúc, kỹ thuật kể chuyện, đối tượng, USP</td></tr>
+  <tr><td>🥁 Pacing &amp; Rhythm</td><td>Nhịp trung bình mỗi shot, tempo, dynamic flow</td></tr>
+  <tr><td>🎣 Hook Strategy</td><td>Kiểu hook, technique, tại sao hiệu quả</td></tr>
+  <tr><td>📋 Replication Guide</td><td>Hướng dẫn từng bước tái tạo video tương tự</td></tr>
+</table>
+
+<h3>3.4 Lưu kết quả DNA</h3>
+<ul>
+  <li><b>💾 Lưu Preset:</b> Lưu phong cách DNA → dùng khi tạo video mới (chọn kênh gắn)</li>
+  <li><b>💾 Lưu nhân vật này:</b> Lưu từng nhân vật vào thư viện (sửa tên trước khi lưu)</li>
+  <li><b>📋 Copy JSON:</b> Copy toàn bộ data DNA ở dạng JSON</li>
+</ul>
+<div class="warning">
+  ⚠️ Nhân vật đã lưu hiện <b>"✅ Đã lưu"</b>. Kết quả DNA tự động lưu vào lịch sử.
+</div>
+
+<h3>3.5 Lịch sử phân tích</h3>
+<p>Cuộn xuống mục <b>"📜 Lịch Sử Phân Tích"</b>:</p>
+<ul>
+  <li>🧬 DNA entries hiện icon 🧬 + điểm ⭐</li>
+  <li>📹 Phân tích thường hiện icon 📹</li>
+  <li>Bấm <b>"▶ Click để xem"</b> → hiện lại kết quả đầy đủ</li>
+  <li>Bấm ✕ để xóa item khỏi lịch sử</li>
+</ul>
+
+<!-- 4. ĐÁNH GIÁ VIDEO -->
+<div class="page-break"></div>
+<h2 id="danh-gia">4. ⭐ Đánh Giá Video</h2>
+<p>Upload video đã làm xong → AI chấm điểm + gợi ý cải thiện.</p>
+
+<div class="step">
+  <b>Bước 1:</b> Tab <b>"Đánh Giá Video"</b><br>
+  <b>Bước 2:</b> Upload file video<br>
+  <b>Bước 3:</b> Bấm <b>"⭐ Đánh Giá Video"</b><br>
+  <b>Bước 4:</b> Đợi 30-90 giây
+</div>
+
+<h3>4.1 Kết quả</h3>
+<table>
+  <tr><th>Mục</th><th>Nội dung</th></tr>
+  <tr><td>⭐ Điểm tổng</td><td>Quality score (/100)</td></tr>
+  <tr><td>🎣 Hook</td><td>Điểm hấp dẫn mở đầu (/10)</td></tr>
+  <tr><td>🎨 Visual</td><td>Chất lượng hình ảnh (/10)</td></tr>
+  <tr><td>🔊 Audio</td><td>Chất lượng âm thanh (/10)</td></tr>
+  <tr><td>🥁 Pacing</td><td>Nhịp độ (/10)</td></tr>
+  <tr><td>✅ Điểm mạnh</td><td>Những gì video làm tốt</td></tr>
+  <tr><td>⚠️ Điểm yếu</td><td>Cần cải thiện</td></tr>
+  <tr><td>💡 Đề xuất</td><td>Gợi ý cụ thể</td></tr>
+</table>
+<div class="tip">💡 Nhắm &gt; 80/100 trước khi đăng. Dưới 70 nên sửa lại.</div>
+
+<h3>4.2 Lịch sử đánh giá</h3>
+<p>Cuộn xuống <b>"📜 Lịch Sử Đánh Giá"</b> → bấm item để xem lại kết quả review cũ.</p>
+
+<!-- 5. KÊNH -->
+<div class="page-break"></div>
+<h2 id="kenh">5. 📺 Kênh Của Tôi &amp; Strategy Chat</h2>
+
+<h3>5.1 Tạo kênh</h3>
+<div class="step">
+  <b>Bước 1:</b> Tab <b>"Kênh Của Tôi"</b> → bấm <b>"➕ Tạo Kênh Mới"</b><br>
+  <b>Bước 2:</b> AI sẽ trò chuyện (Strategy Chat) để hiểu kênh của bạn:<br>
+  <ul>
+    <li>Tên kênh, niche, đối tượng, phong cách nội dung</li>
+    <li>AI hỏi 3-5 câu → tổng hợp thành <b>Brief kênh</b></li>
+    <li>Brief lưu tự động → AI dùng khi tạo video cho kênh này</li>
+  </ul>
+  <b>Bước 3:</b> Sau khi xong, chọn số ngày → AI tạo <b>Roadmap</b> nội dung
+</div>
+
+<h3>5.2 Strategy Chat (Trò chuyện chiến lược)</h3>
+<p>Khi tạo kênh mới, một cửa sổ chat popup xuất hiện:</p>
+<ul>
+  <li>AI hỏi về: mục tiêu kênh, phong cách, đối tượng, "vibe" mong muốn</li>
+  <li>Bạn trả lời tự nhiên bằng tiếng Việt</li>
+  <li>AI tổng hợp thành <b>Brief</b> chứa: brand name, niche, tone, content pillars, CTA strategy, hashtag style...</li>
+  <li>Brief được lưu vào kênh → dùng để tạo video &amp; roadmap</li>
+</ul>
+<div class="tip">💡 Chat càng chi tiết, video tạo ra càng phù hợp phong cách kênh.</div>
+
+<h3>5.3 Xem chi tiết kênh</h3>
+<p>Bấm vào kênh để xem:</p>
+<ul>
+  <li>📊 Thống kê: tổng views, video đã đăng</li>
+  <li>📋 Brief kênh (nếu đã tạo): niche, tone, format, CTA</li>
+  <li>🗺️ Roadmaps: kế hoạch đăng bài theo ngày</li>
+</ul>
+
+<!-- 6. ROADMAP -->
+<div class="page-break"></div>
+<h2 id="roadmap">6. 🗺️ Roadmap Nội Dung</h2>
+<p>Roadmap = lịch đăng bài hàng ngày, gợi ý ý tưởng nội dung.</p>
+
+<h3>6.1 Tạo Roadmap</h3>
+<div class="step">
+  <b>Bước 1:</b> Vào kênh → bấm <b>"🗺️ Tạo Roadmap"</b><br>
+  <b>Bước 2:</b> Chọn số ngày (1-30)<br>
+  <b>Bước 3:</b> AI tạo lịch trình dựa trên brief kênh
+</div>
+
+<h3>6.2 Slot trong Roadmap</h3>
+<p>Mỗi ngày có nhiều <b>slot</b> (ý tưởng video). Mỗi slot hiện:</p>
+<ul>
+  <li>📝 Mô tả ý tưởng video</li>
+  <li>🏷️ Hashtags gợi ý</li>
+  <li>Trạng thái: ⏳ Chờ / ✅ Đã đăng</li>
+</ul>
+
+<h3>6.3 Hành động trên slot</h3>
+<table>
+  <tr><th>Nút</th><th>Chức năng</th></tr>
+  <tr><td>🎬 Tạo Video</td><td>Mở tab Tạo Video với ý tưởng slot đã điền sẵn</td></tr>
+  <tr><td>📹 Scan Video</td><td>Paste URL video đã đăng → AI tự lấy view count, cập nhật trạng thái</td></tr>
+</table>
+
+<h3>6.4 Scan Published Video</h3>
+<div class="step">
+  <b>Bước 1:</b> Sau khi đăng video lên TikTok/YouTube, copy URL<br>
+  <b>Bước 2:</b> Paste vào ô "URL đã đăng" trên slot tương ứng<br>
+  <b>Bước 3:</b> Bấm <b>"📹 Scan"</b> → AI lấy view count, cập nhật trạng thái thành ✅
+</div>
+
+<!-- 7. HỒ SƠ -->
+<div class="page-break"></div>
+<h2 id="ho-so">7. 👤 Hồ Sơ &amp; Lịch Sử</h2>
+
+<h3>7.1 Thông tin cá nhân</h3>
+<ul>
+  <li>👤 Tên hiển thị — bấm "Đổi tên" để sửa</li>
+  <li>🔑 Đổi mật khẩu</li>
+  <li>📊 Tổng quan: số kênh, preset, nhân vật</li>
+</ul>
+
+<h3>7.2 Lịch sử hoạt động</h3>
+<table>
+  <tr><th>Loại</th><th>Nội dung</th><th>Click để xem</th></tr>
+  <tr><td>📝 Tạo Video</td><td>Video đã lên kế hoạch</td><td>Hiện lại kế hoạch + ảnh</td></tr>
+  <tr><td>🧬 Phân Tích DNA</td><td>Video đã phân tích DNA</td><td>Hiện lại DNA đầy đủ</td></tr>
+  <tr><td>📹 Phân Tích Thường</td><td>Video đã phân tích cơ bản</td><td>Hiện lại kết quả</td></tr>
+  <tr><td>⭐ Đánh Giá</td><td>Video đã đánh giá</td><td>Hiện lại review</td></tr>
+</table>
+<div class="tip">💡 Item có <b>"▶ Click để xem"</b> = có dữ liệu đầy đủ để xem lại.</div>
+
+<!-- 8. PRESET -->
+<div class="page-break"></div>
+<h2 id="preset">8. 📂 Quản Lý Preset</h2>
+<p>Preset = bộ phong cách lưu lại, dùng khi tạo video → AI theo phong cách đó.</p>
+
+<h3>8.1 Hai loại Preset</h3>
+<table>
+  <tr><th>Loại</th><th>Nguồn</th><th>Chứa</th></tr>
+  <tr><td>🧬 DNA Preset</td><td>Từ phân tích DNA</td><td>Style, nhịp độ, nhân vật, cấu trúc — clone phong cách video gốc</td></tr>
+  <tr><td>✍️ Custom Preset</td><td>Tự viết</td><td>Rules/prompt tùy chỉnh do bạn viết</td></tr>
+</table>
+
+<h3>8.2 Lưu Preset từ DNA</h3>
+<div class="step">
+  Phân tích DNA → bấm <b>"💾 Lưu Preset"</b> → đặt tên → chọn kênh → xác nhận
+</div>
+
+<h3>8.3 Tạo Custom Preset</h3>
+<div class="step">
+  Tab Tạo Video → bấm <b>⚙️</b> (Preset Manager) → nhập tên, chọn kênh, viết rules (≥20 ký tự) → <b>"💾 Lưu"</b>
+</div>
+
+<h3>8.4 Sử dụng Preset</h3>
+<p>Tab Tạo Video → dropdown <b>"Chọn Preset"</b>. Hiện dạng: <b>"Tên • 📺 Kênh"</b></p>
+<p>Khi chọn DNA Preset, AI thấy phong cách chi tiết: số nhân vật, điểm ⭐, style.</p>
+
+<h3>8.5 Xóa Preset</h3>
+<p>Mở Preset Manager (⚙️) → bấm 🗑️ bên cạnh preset muốn xóa.</p>
+
+<!-- 9. NHÂN VẬT -->
+<div class="page-break"></div>
+<h2 id="nhan-vat">9. 🎭 Quản Lý Nhân Vật</h2>
+<p>Nhân vật giúp video nhất quán — cùng ngoại hình, tính cách xuyên suốt nhiều video.</p>
+
+<h3>9.1 Lưu nhân vật từ DNA</h3>
+<div class="step">
+  Phân tích DNA → phần <b>"🎭 Nhân Vật"</b> → bấm <b>"💾 Lưu nhân vật này"</b> trên từng nhân vật → sửa tên → xác nhận. Đã lưu hiện ✅.
+</div>
+
+<h3>9.2 Thêm nhân vật thủ công</h3>
+<div class="step">
+  Bấm <b>"🎭 Thư Viện Nhân Vật"</b> → phần <b>"➕ Thêm Nhân Vật Mới"</b>:<br>
+  <ul>
+    <li>👤 <b>Tên</b></li>
+    <li>⚧ <b>Giới tính</b> (male/female)</li>
+    <li>🎬 <b>Vai trò</b> (narrator, mascot, demonstrator...)</li>
+    <li>👕 <b>Ngoại hình</b> (mô tả chi tiết — càng cụ thể, ảnh AI càng chuẩn)</li>
+    <li>💫 <b>Tính cách</b></li>
+    <li>🖼️ <b>Prompt tạo ảnh</b> (ref_prompt — dùng khi AI tạo ảnh nhân vật)</li>
+  </ul>
+  Bấm <b>"💾 Thêm Nhân Vật"</b>
+</div>
+
+<h3>9.3 Sửa nhân vật</h3>
+<p>Bấm ✏️ trên nhân vật → sửa tên, ngoại hình, tính cách, ref_prompt.</p>
+
+<h3>9.4 Xóa nhân vật</h3>
+<p>Bấm 🗑️ → xác nhận xóa.</p>
+
+<!-- 10. CHATBOT -->
+<div class="page-break"></div>
+<h2 id="chatbot">10. 💬 AI Chatbot Hỗ Trợ</h2>
+<p>Chatbot AI nằm ở <b>góc phải dưới</b> màn hình (nút 💬), hỗ trợ mọi lúc.</p>
+
+<h3>10.1 Mở Chatbot</h3>
+<div class="step">
+  Bấm nút <b>💬</b> ở góc phải dưới → panel chat mở ra
+</div>
+
+<h3>10.2 Tính năng</h3>
+<ul>
+  <li>💬 <b>Chat tự do:</b> Hỏi AI mọi thứ liên quan đến video, content, marketing</li>
+  <li>📎 <b>Đính kèm file:</b> Bấm 📎 → upload ảnh, video, PDF để AI phân tích</li>
+  <li>📂 <b>Nhiều cuộc hội thoại:</b> Bấm nút sidebar trái để tạo/chuyển giữa các cuộc chat</li>
+  <li>➕ <b>Cuộc chat mới:</b> Bấm ➕ để bắt đầu conversation mới</li>
+  <li>📜 <b>Lịch sử chat:</b> Tất cả cuộc chat được lưu, có thể quay lại xem</li>
+</ul>
+
+<h3>10.3 Ví dụ câu hỏi hay</h3>
+<table>
+  <tr><th>Câu hỏi</th><th>AI giúp gì</th></tr>
+  <tr><td>"Gợi ý 5 ý tưởng video TikTok nấu ăn"</td><td>Brainstorm ý tưởng theo niche</td></tr>
+  <tr><td>"Viết caption cho video review sản phẩm X"</td><td>Viết caption + hashtag</td></tr>
+  <tr><td>"Phân tích xu hướng content food hiện tại"</td><td>Phân tích trend</td></tr>
+  <tr><td>"So sánh 2 phong cách video của tôi"</td><td>So sánh (kèm file)</td></tr>
+  <tr><td>"Viết script voice-over cho video 30s"</td><td>Viết script</td></tr>
+</table>
+<div class="tip">💡 Chat hỗ trợ tiếng Việt hoàn toàn. Bạn có thể gửi cả ảnh/video để AI phân tích.</div>
+
+<!-- 11. MẸO -->
+<div class="page-break"></div>
+<h2 id="meo">11. 💡 Mẹo &amp; Xử Lý Lỗi</h2>
+
+<h3>🔥 Workflow hiệu quả nhất</h3>
+<div class="step">
+  <ol>
+    <li><b>Tạo kênh</b> → chat chiến lược → AI tạo brief <b>&amp;</b> roadmap</li>
+    <li><b>Tìm video viral</b> mẫu → <b>Phân tích DNA</b> → lưu Preset + Nhân vật</li>
+    <li><b>Tạo video mới</b> bằng Preset + chọn Nhân vật → AI clone phong cách</li>
+    <li><b>Đánh giá video</b> → cải thiện nếu &lt; 80 điểm</li>
+    <li><b>Đăng video</b> → Scan URL vào roadmap → theo dõi views</li>
+    <li>Lặp lại!</li>
+  </ol>
+</div>
+
+<h3>📌 Xử lý lỗi thường gặp</h3>
+<table>
+  <tr><th>Vấn đề</th><th>Giải pháp</th></tr>
+  <tr><td>Trang trắng / UI lỗi</td><td><b>Ctrl + Shift + R</b> (hard refresh)</td></tr>
+  <tr><td>Kết quả bằng tiếng Anh</td><td>Chọn <b>"VN Việt Nam"</b> ở dropdown ngôn ngữ</td></tr>
+  <tr><td>Video quá lớn để upload</td><td>Dùng <b>"DNA từ URL"</b> — paste link thay vì upload</td></tr>
+  <tr><td>Muốn phong cách nhất quán</td><td>Luôn chọn <b>Preset + Nhân vật</b> cố định</td></tr>
+  <tr><td>Nhân vật không hiện</td><td><b>Ctrl + Shift + R</b> để refresh</td></tr>
+  <tr><td>API lỗi / timeout</td><td>Đợi 30s rồi thử lại. Nếu vẫn lỗi → báo admin</td></tr>
+  <tr><td>Lịch sử cũ trống</td><td>Chỉ lịch sử sau ngày deploy mới mới có data đầy đủ</td></tr>
+</table>
+
+<h3>⌨️ Phím tắt</h3>
+<table>
+  <tr><th>Phím</th><th>Chức năng</th></tr>
+  <tr><td>Ctrl + Shift + R</td><td>Hard refresh (xóa cache)</td></tr>
+  <tr><td>F5</td><td>Refresh trang</td></tr>
+  <tr><td>Enter</td><td>Gửi tin nhắn trong chatbot</td></tr>
+</table>
+
+<p class="footer">
+  📹 Video Planner v3.1 — Powered by Google Gemini AI<br>
+  Tài liệu hướng dẫn sử dụng — Cập nhật 28/02/2026
+</p>
+
+</body>
+</html>
