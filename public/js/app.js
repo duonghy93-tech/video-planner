@@ -2968,8 +2968,8 @@ async function onChannelForGenerateChange() {
             });
         });
 
-        // Sort: today first, then by day number
-        tasks.sort((a, b) => (b.isToday - a.isToday) || (a.day - b.day));
+        // Sort: today first, then by day number, then by slot
+        tasks.sort((a, b) => (b.isToday - a.isToday) || (a.day - b.day) || (a.slot - b.slot));
 
         if (!tasks.length) {
             taskSel.disabled = true;
@@ -2977,22 +2977,31 @@ async function onChannelForGenerateChange() {
             return;
         }
 
+        // Count today's tasks
+        const todayTasks = tasks.filter(t => t.isToday);
+        const todayCount = todayTasks.length;
+
         taskSel.disabled = false;
-        taskSel.innerHTML = '<option value="">-- Chọn video cần tạo --</option>' +
+        const placeholder = todayCount > 0
+            ? `-- 🔴 Hôm nay có ${todayCount} video cần tạo --`
+            : '-- Chọn video cần tạo --';
+
+        taskSel.innerHTML = `<option value="">${placeholder}</option>` +
             tasks.map((t, i) => {
-                const badge = t.isToday ? '🔴 HÔM NAY' : `Ngày ${t.day}`;
+                let badge;
+                if (t.isToday) {
+                    const todayIdx = todayTasks.indexOf(t) + 1;
+                    badge = `🔴 HÔM NAY #${todayIdx}/${todayCount}`;
+                } else {
+                    badge = `📅 Ngày ${t.day}`;
+                }
                 return `<option value="${i}" data-idx="${i}">${badge} — ${t.title}</option>`;
             }).join('');
 
         // Store tasks for later use
         window._generatorTasks = tasks;
 
-        // Auto-select today's task if available
-        const todayTask = tasks.findIndex(t => t.isToday);
-        if (todayTask >= 0) {
-            taskSel.value = todayTask;
-            onRoadmapTaskSelect();
-        }
+        // Don't auto-select — let user choose which task to work on
     } catch (e) {
         console.error('Roadmap load error:', e);
         taskSel.disabled = true;
