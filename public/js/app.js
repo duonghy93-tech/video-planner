@@ -488,7 +488,7 @@ async function handleVideoAnalyze() {
 
         const res = await fetch('/api/analyze-video', {
             method: 'POST',
-            headers: { 'x-api-key': getStoredApiKey() },
+            headers: { 'x-api-key': getStoredApiKey(), 'Authorization': 'Bearer ' + getAuthToken() },
             body: formData
         });
 
@@ -551,7 +551,7 @@ async function handleVideoReview() {
 
         const res = await fetch('/api/review-video', {
             method: 'POST',
-            headers: { 'x-api-key': getStoredApiKey() },
+            headers: { 'x-api-key': getStoredApiKey(), 'Authorization': 'Bearer ' + getAuthToken() },
             body: formData
         });
 
@@ -1340,7 +1340,7 @@ async function handleDNAAnalyze() {
 
         const res = await fetch('/api/analyze-dna', {
             method: 'POST',
-            headers: { 'x-api-key': getStoredApiKey() },
+            headers: { 'x-api-key': getStoredApiKey(), 'Authorization': 'Bearer ' + getAuthToken() },
             body: formData
         });
 

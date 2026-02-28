@@ -288,7 +288,7 @@ IMPORTANT:
 - The style_dna should be detailed enough to recreate the exact look and feel
 - Score honestly — don't inflate scores
 - Return ONLY the JSON, no markdown formatting, no code blocks
-${langFormat === 'US' ? '- ALL text content MUST be in English' : '- Text content in Vietnamese, keep technical terms in English'}`;
+${langFormat === 'US' ? '- ALL text content MUST be in English' : '- CRITICAL: ALL text content (descriptions, analyses, strategies, recommendations, money_points, hook_strategy, emotional_arc, content_formula, replication_guide) MUST be written in Vietnamese (tiếng Việt). Only keep technical terms and color hex codes in English.'}`;
 
     const videoPart = await uploadVideoForAnalysis(videoBuffer, mimeType);
 
