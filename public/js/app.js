@@ -113,18 +113,21 @@ async function checkApiStatus() {
 }
 
 // ============ TABS ============
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+    if (btn) btn.classList.add('active');
+    const panel = document.getElementById(`panel${capitalize(tabName)}`);
+    if (panel) panel.classList.add('active');
+    // Auto-load data when tab is switched
+    if (tabName === 'admin') loadAdminDashboard();
+    if (tabName === 'text') loadHistory();
+}
+
 function setupTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const tab = btn.dataset.tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById(`panel${capitalize(tab)}`).classList.add('active');
-            // Auto-load data when tab is clicked
-            if (tab === 'admin') loadAdminDashboard();
-            if (tab === 'text') loadHistory();
-        });
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 }
 
