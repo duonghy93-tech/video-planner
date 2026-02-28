@@ -77,6 +77,7 @@ app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 app.use(express.static('public'));
 app.use('/output', express.static('output'));
+app.use('/docs', express.static('docs'));
 
 // Per-user API key middleware: read from x-api-key header
 app.use((req, res, next) => {
