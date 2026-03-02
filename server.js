@@ -10,6 +10,8 @@ const { execFile } = require('child_process');
 const sharp = require('sharp');
 let gemini = require('./gemini-service');
 const auth = require('./auth');
+const aiProvider = require('./ai-provider');
+const notify = require('./telegram-notifier');
 
 // Cross-platform yt-dlp path
 function getYtdlpCmd() {
@@ -141,14 +143,176 @@ function writeJsonFile(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
+// ============ VIDEO DOWNLOADER ============
+const downloadsDir = path.join(__dirname, 'downloads');
+if (!fs.existsSync(downloadsDir)) {
+    fs.mkdirSync(downloadsDir, { recursive: true });
+}
+app.use('/downloads', express.static(downloadsDir));
+
+// Active downloads tracking
+const activeDownloads = new Map();
+
+app.post('/api/download-video', auth.authMiddleware, (req, res) => {
+    const { url, quality } = req.body;
+    if (!url) return res.status(400).json({ error: 'URL is required' });
+
+    const ytdlpPath = getYtdlpCmd();
+    if (!ytdlpPath) return res.status(500).json({ error: 'yt-dlp not found on server' });
+
+    const downloadId = 'dl_' + Date.now().toString(36);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+    // Build yt-dlp args for best quality, no watermark
+    const outputTemplate = path.join(downloadsDir, `${timestamp}_%(title).50s.%(ext)s`);
+    const args = [
+        '--no-warnings',
+        '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        '--merge-output-format', 'mp4',
+        '-o', outputTemplate,
+        '--no-playlist',
+        '--socket-timeout', '60',
+        '--no-check-certificates',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '--progress',
+    ];
+
+    // Platform-specific: remove watermark
+    const urlLower = url.toLowerCase();
+    if (urlLower.includes('tiktok.com')) {
+        // TikTok: download without watermark
+        args.push('--extractor-args', 'tiktok:api_hostname=api22-normal-c-alisg.tiktokv.com');
+    } else if (urlLower.includes('douyin.com')) {
+        args.push('--extractor-args', 'douyin:api_hostname=aweme.snssdk.com');
+    }
+
+    args.push(url);
+
+    console.log(`⬇️ [Download] Starting: ${url.substring(0, 60)}...`);
+
+    activeDownloads.set(downloadId, {
+        id: downloadId,
+        url: url.substring(0, 200),
+        status: 'downloading',
+        progress: 0,
+        filename: null,
+        error: null,
+        startedAt: new Date().toISOString(),
+    });
+
+    const child = execFile(ytdlpPath, args, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        const dl = activeDownloads.get(downloadId);
+        if (!dl) return;
+
+        if (err) {
+            console.error(`❌ [Download] Failed: ${err.message.substring(0, 200)}`);
+            dl.status = 'error';
+            dl.error = err.message.substring(0, 300);
+            return;
+        }
+
+        // Find the downloaded file
+        try {
+            const files = fs.readdirSync(downloadsDir)
+                .filter(f => f.startsWith(timestamp))
+                .map(f => ({
+                    name: f,
+                    path: path.join(downloadsDir, f),
+                    size: fs.statSync(path.join(downloadsDir, f)).size,
+                    mtime: fs.statSync(path.join(downloadsDir, f)).mtimeMs,
+                }))
+                .sort((a, b) => b.mtime - a.mtime);
+
+            if (files.length > 0) {
+                const file = files[0];
+                dl.status = 'done';
+                dl.filename = file.name;
+                dl.filesize = file.size;
+                dl.downloadUrl = `/downloads/${encodeURIComponent(file.name)}`;
+                console.log(`✅ [Download] Done: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+            } else {
+                dl.status = 'error';
+                dl.error = 'File not found after download';
+            }
+        } catch (e) {
+            dl.status = 'error';
+            dl.error = e.message;
+        }
+    });
+
+    // Parse progress from stderr
+    child.stderr?.on('data', (data) => {
+        const dl = activeDownloads.get(downloadId);
+        if (!dl) return;
+        const line = data.toString();
+        const pctMatch = line.match(/(\d+\.?\d*)%/);
+        if (pctMatch) {
+            dl.progress = parseFloat(pctMatch[1]);
+        }
+        // Capture title
+        const titleMatch = line.match(/\[download\] Destination: (.+)/);
+        if (titleMatch) {
+            dl.title = path.basename(titleMatch[1]);
+        }
+    });
+
+    res.json({ downloadId, status: 'downloading' });
+});
+
+// Check download status
+app.get('/api/download-status/:id', auth.authMiddleware, (req, res) => {
+    const dl = activeDownloads.get(req.params.id);
+    if (!dl) return res.status(404).json({ error: 'Download not found' });
+    res.json(dl);
+});
+
+// List all downloaded files
+app.get('/api/downloads', auth.authMiddleware, (req, res) => {
+    try {
+        const files = fs.readdirSync(downloadsDir)
+            .filter(f => /\.(mp4|webm|mkv|mov|avi)$/i.test(f))
+            .map(f => {
+                const stat = fs.statSync(path.join(downloadsDir, f));
+                return {
+                    name: f,
+                    size: stat.size,
+                    sizeMB: (stat.size / 1024 / 1024).toFixed(1),
+                    downloadUrl: `/downloads/${encodeURIComponent(f)}`,
+                    createdAt: stat.birthtime.toISOString(),
+                };
+            })
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        res.json(files);
+    } catch (e) {
+        res.json([]);
+    }
+});
+
+// Delete a downloaded file
+app.delete('/api/downloads/:filename', auth.authMiddleware, (req, res) => {
+    try {
+        const filePath = path.join(downloadsDir, decodeURIComponent(req.params.filename));
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'File not found' });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ============ API ROUTES ============
 
 // Health check
 app.get('/api/health', (req, res) => {
     const hasKey = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_api_key_here';
+    const userId = req.user?.id;
     res.json({
         status: 'ok',
         apiConfigured: hasKey,
+        providerStatus: userId ? aiProvider.getProviderStatus(userId) : null,
         timestamp: new Date().toISOString()
     });
 });
@@ -159,6 +323,7 @@ app.post('/api/auth/login', async (req, res) => {
         const { username, password } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'Thiếu username hoặc password' });
         const result = await auth.loginUser(username, password);
+        notify.userLogin(username, req.ip);
         res.json(result);
     } catch (err) {
         res.status(401).json({ error: err.message });
@@ -171,6 +336,7 @@ app.post('/api/auth/register', auth.authMiddleware, async (req, res) => {
         const { username, password, name, role } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'Thiếu username hoặc password' });
         const user = await auth.registerUser(username, password, name, role);
+        notify.userRegister(username, name, role);
         res.json({ success: true, user });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -278,12 +444,36 @@ app.post('/api/channels/:id/strategy', auth.authMiddleware, async (req, res) => 
         const channel = channels.find(c => c.id === req.params.id && c.userId === req.user.id);
         if (!channel) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
 
-        const result = await gemini.strategyChat(channel, messages || []);
+        // Try Claude Opus first, fallback to Gemini
+        let result;
+        const opusResult = await aiProvider.generateTextWithHistory(
+            req.user.id,
+            `You are a senior social media strategist helping plan a content channel.
+Channel: ${channel.name} | Niche: ${channel.niche || 'General'} | Language: ${channel.language === 'VN' ? 'Vietnamese' : 'English (US)'}
+Posts per day: ${channel.postsPerDay || 2}
+
+Interview the user to understand their channel strategy. Ask ONE question at a time in Vietnamese.
+Topics: target audience, tone, products/services, competitors, CTA, dos/don'ts.
+After 5+ exchanges, return JSON: {"done": true, "brief": {"target_audience": "...", "tone": "...", "products": "...", "competitors": "...", "content_pillars": [...], "cta_strategy": "...", "dos_and_donts": "..."}}
+If not done, respond with plain text (your next question).`,
+            (messages || []).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }))
+        );
+        if (opusResult.text && opusResult.provider !== 'gemini-fallback') {
+            console.log(`[strategy-chat] Using ${opusResult.provider}`);
+            try {
+                const jsonMatch = opusResult.text.match(/\{[\s\S]*"done"\s*:\s*true[\s\S]*\}/);
+                if (jsonMatch) result = JSON.parse(jsonMatch[0]);
+                else result = { done: false, message: opusResult.text };
+            } catch (e) { result = { done: false, message: opusResult.text }; }
+        } else {
+            result = await gemini.strategyChat(channel, messages || []);
+        }
 
         // If AI returned a brief, save it to channel
         if (result.done && result.brief) {
             channel.brief = result.brief;
             writeJsonFile(path.join(dataDir, 'channels.json'), channels);
+            notify.strategyChat(req.user.username, channel.name);
             console.log(`\u2705 Channel brief saved for "${channel.name}"`);
         }
 
@@ -347,6 +537,7 @@ app.post('/api/channels', auth.authMiddleware, (req, res) => {
         const channels = readJsonFile(CHANNELS_FILE);
         channels.push(channel);
         writeJsonFile(CHANNELS_FILE, channels);
+        notify.channelCreated(req.user.username, name, niche);
         res.json({ success: true, channel });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -421,9 +612,11 @@ app.get('/api/admin/channels/:id', auth.authMiddleware, (req, res) => {
 app.delete('/api/channels/:id', auth.authMiddleware, (req, res) => {
     try {
         const channels = readJsonFile(CHANNELS_FILE);
+        const deleted = channels.find(c => c.id === req.params.id && c.userId === req.user.id);
         const filtered = channels.filter(c => !(c.id === req.params.id && c.userId === req.user.id));
         if (filtered.length === channels.length) return res.status(404).json({ error: 'Kh\u00f4ng t\u00ecm th\u1ea5y k\u00eanh' });
         writeJsonFile(CHANNELS_FILE, filtered);
+        notify.channelDeleted(req.user.username, deleted?.name || req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -459,7 +652,23 @@ app.post('/api/roadmaps/generate', auth.authMiddleware, async (req, res) => {
         }
 
         console.log(`\ud83d\uddd3\ufe0f Generating roadmap for "${channel.name}" (${days || 7} days)...`);
-        const roadmapData = await gemini.generateRoadmap(channel, preset, startDate, days || 7);
+
+        let roadmapData;
+        // Try Claude Opus first
+        const opusRoadmap = await aiProvider.generateText(
+            req.user.id,
+            'You are an expert social media content strategist. Return ONLY valid JSON, no markdown.',
+            gemini.buildRoadmapPrompt ? '' : `Create a ${days || 7}-day content roadmap for channel "${channel.name}" (${channel.niche || 'General'}). ${channel.postsPerDay || 2} posts/day. Start: ${startDate}. Language: ${channel.language === 'VN' ? 'Vietnamese' : 'English'}. Return JSON with roadmap_name, channel, week_start, total_videos, days array with videos (title, idea, content_type, hashtags, best_post_time), weekly_strategy.`,
+            { jsonMode: true }
+        );
+        if (opusRoadmap.text && opusRoadmap.provider !== 'gemini-fallback') {
+            console.log(`[roadmap] Using ${opusRoadmap.provider}`);
+            try { roadmapData = gemini.safeJsonParse(opusRoadmap.text); } catch (e) { roadmapData = null; }
+        }
+        // Fallback to Gemini
+        if (!roadmapData) {
+            roadmapData = await gemini.generateRoadmap(channel, preset, startDate, days || 7);
+        }
 
         const roadmap = {
             id: 'rm_' + Date.now().toString(36),
@@ -476,6 +685,7 @@ app.post('/api/roadmaps/generate', auth.authMiddleware, async (req, res) => {
         writeJsonFile(ROADMAPS_FILE, roadmaps);
 
         console.log(`\u2705 Roadmap created: ${roadmap.roadmap_name || 'untitled'} (${roadmapData.total_videos} videos)`);
+        notify.roadmapGenerated(req.user.username, channel.name, roadmap.roadmap_name, roadmapData.total_videos);
         res.json({ success: true, roadmap });
     } catch (err) {
         console.error('[roadmap] Error:', err.message);
@@ -548,7 +758,30 @@ app.post('/api/roadmaps/:id/next', auth.authMiddleware, async (req, res) => {
         });
 
         console.log(`\ud83d\udd04 Generating next roadmap based on "${prevRoadmap.roadmap_name}"...`);
-        const roadmapData = await gemini.generateNextRoadmap(channel, preset, prevRoadmap, performance);
+
+        let roadmapData;
+        // Try Claude Opus first
+        let perfSummary = '';
+        if (performance?.length) {
+            perfSummary = 'Previous performance: ' + performance.map(v => `"${v.title}": ${v.views || '?'} views, ${v.likes || '?'} likes`).join('; ');
+        }
+        let prevTopics = '';
+        if (prevRoadmap?.days) {
+            prevTopics = 'Previous topics (do NOT repeat): ' + prevRoadmap.days.flatMap(d => d.videos?.map(v => v.title) || []).join(', ');
+        }
+        const opusNext = await aiProvider.generateText(
+            req.user.id,
+            'You are an expert social media content strategist. Return ONLY valid JSON, no markdown.',
+            `Create NEXT 7-day roadmap for "${channel.name}" (${channel.niche || 'General'}). ${channel.postsPerDay || 2} posts/day. ${perfSummary} ${prevTopics} Strategy: good topics → similar variations, bad → replace, add 2-3 new ideas. Return JSON with roadmap_name, channel, week_start, total_videos, performance_insights, days array, weekly_strategy.`,
+            { jsonMode: true }
+        );
+        if (opusNext.text && opusNext.provider !== 'gemini-fallback') {
+            console.log(`[next-roadmap] Using ${opusNext.provider}`);
+            try { roadmapData = gemini.safeJsonParse(opusNext.text); } catch (e) { roadmapData = null; }
+        }
+        if (!roadmapData) {
+            roadmapData = await gemini.generateNextRoadmap(channel, preset, prevRoadmap, performance);
+        }
 
         const newRoadmap = {
             id: 'rm_' + Date.now().toString(36),
@@ -847,7 +1080,7 @@ app.put('/api/profile/password', auth.authMiddleware, (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Configure API key at runtime (per-session, not saved to disk)
+// Configure API key at runtime (per-session, not saved to disk) — legacy
 app.post('/api/config', (req, res) => {
     try {
         const { apiKey } = req.body;
@@ -856,17 +1089,91 @@ app.post('/api/config', (req, res) => {
         }
 
         process.env.GEMINI_API_KEY = apiKey.trim();
-
-        // Re-initialize gemini service with new key
         delete require.cache[require.resolve('./gemini-service')];
         gemini = require('./gemini-service');
 
         console.log('✅ API Key configured via UI (session only)');
-        res.json({ success: true, message: 'API Key đã được cấu hình thành công! (chỉ cho phiên này)' });
+        res.json({ success: true, message: 'API Key đã được cấu hình thành công!' });
     } catch (err) {
         console.error('[config] Error:', err.message);
         res.status(500).json({ error: 'Lỗi khi cấu hình: ' + err.message });
     }
+});
+
+// ============ USER API KEYS MANAGEMENT ============
+
+// Get user's API keys (masked)
+app.get('/api/user/api-keys', auth.authMiddleware, (req, res) => {
+    try {
+        const keys = aiProvider.getUserKeys(req.user.id);
+        // Mask keys for display
+        const masked = {};
+        for (const [k, v] of Object.entries(keys)) {
+            if (k === 'updatedAt') { masked[k] = v; continue; }
+            if (typeof v === 'string' && v.length > 8) {
+                masked[k] = v.substring(0, 4) + '***' + v.substring(v.length - 4);
+            } else {
+                masked[k] = v ? '***' : '';
+            }
+        }
+        res.json({ keys: masked });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Save user's API keys
+app.post('/api/user/api-keys', auth.authMiddleware, (req, res) => {
+    try {
+        const { keys } = req.body;
+        if (!keys || typeof keys !== 'object') {
+            return res.status(400).json({ error: 'Invalid keys format' });
+        }
+
+        // Validate key names
+        const allowedKeys = ['GEMINI_API_KEY', 'VERTEX_KEY_API_KEY', 'FAL_KEY'];
+        const validKeys = {};
+        for (const [k, v] of Object.entries(keys)) {
+            if (allowedKeys.includes(k) && typeof v === 'string') {
+                validKeys[k] = v.trim();
+            }
+        }
+
+        const saved = aiProvider.setUserKeys(req.user.id, validKeys);
+
+        // Also update Gemini env for backward compat
+        if (validKeys.GEMINI_API_KEY) {
+            process.env.GEMINI_API_KEY = validKeys.GEMINI_API_KEY;
+            delete require.cache[require.resolve('./gemini-service')];
+            gemini = require('./gemini-service');
+        }
+
+        res.json({ success: true, message: 'API keys đã được lưu!' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Delete a specific API key
+app.delete('/api/user/api-keys/:keyName', auth.authMiddleware, (req, res) => {
+    try {
+        aiProvider.deleteUserKey(req.user.id, req.params.keyName);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get provider status & warnings
+app.get('/api/user/provider-status', auth.authMiddleware, (req, res) => {
+    try {
+        const status = aiProvider.getProviderStatus(req.user.id);
+        const warnings = aiProvider.getWarnings(req.user.id);
+        res.json({ status, warnings });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: Get all users' API keys (masked)
+app.get('/api/admin/api-keys', auth.authMiddleware, (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+        const allKeys = aiProvider.getAllUsersKeys();
+        res.json({ keys: allKeys });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // POST /api/analyze-video — Analyze uploaded video
@@ -904,6 +1211,7 @@ app.post('/api/analyze-video', auth.authMiddleware, upload.single('video'), asyn
         if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
         writeJsonFile(ANALYSIS_HISTORY_FILE, aHist);
 
+        notify.videoAnalyzed(req.user?.username || 'anonymous', 'analysis', req.file.originalname);
         res.json({ success: true, plan, outputDir: planDir });
     } catch (error) {
         console.error('[analyze-video] Error:', error.message);
@@ -990,6 +1298,7 @@ app.post('/api/analyze-dna-url', auth.authMiddleware, async (req, res) => {
         if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
         writeJsonFile(ANALYSIS_HISTORY_FILE, aHist);
 
+        notify.videoAnalyzed(req.user?.username || 'anonymous', 'DNA từ URL', url);
         res.json({ success: true, dna, outputDir: dnaDir });
     } catch (error) {
         console.error('[analyze-dna-url] Error:', error.message);
@@ -998,7 +1307,7 @@ app.post('/api/analyze-dna-url', auth.authMiddleware, async (req, res) => {
 });
 
 // POST /api/analyze-url — Download video from URL then analyze
-app.post('/api/analyze-url', async (req, res) => {
+app.post('/api/analyze-url', auth.authMiddleware, async (req, res) => {
     try {
         const { url, langFormat } = req.body;
         if (!url) {
@@ -1017,6 +1326,27 @@ app.post('/api/analyze-url', async (req, res) => {
         fs.mkdirSync(planDir, { recursive: true });
         fs.writeFileSync(path.join(planDir, 'plan.json'), JSON.stringify(plan, null, 2));
 
+        // Save to analysis history with sourceUrl
+        const userId = req.user?.id || 'anonymous';
+        let aHist = readJsonFile(ANALYSIS_HISTORY_FILE);
+        if (Array.isArray(aHist) || !aHist) aHist = {};
+        if (!aHist[userId]) aHist[userId] = [];
+        aHist[userId].unshift({
+            id: 'ah_' + Date.now().toString(36),
+            type: 'analyze',
+            filename: url,
+            sourceUrl: url,
+            fileSize: videoBuffer.length,
+            clipCount: plan.clips?.length || 0,
+            projectName: plan.project_name || projectName,
+            langFormat: langFormat || 'VN',
+            plan: plan,
+            createdAt: new Date().toISOString()
+        });
+        if (aHist[userId].length > 30) aHist[userId] = aHist[userId].slice(0, 30);
+        writeJsonFile(ANALYSIS_HISTORY_FILE, aHist);
+
+        notify.videoAnalyzed(req.user?.username || 'anonymous', 'Tạo video từ URL', url);
         res.json({ success: true, plan, outputDir: planDir });
     } catch (error) {
         console.error('[analyze-url] Error:', error.message);
@@ -1175,7 +1505,40 @@ app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()),
 
         console.log(`[analyze-text] "${description.substring(0, 50)}..." duration: ${duration}s, lang: ${langFormat || 'VN'}${preset ? ', with preset' : ''}${characters?.length ? `, with ${characters.length} characters` : ''}`);
 
-        const plan = await gemini.generatePlan(fullDesc, parseInt(duration), langFormat || 'VN', preset);
+        let plan;
+        // Try Claude Opus first (better prompt quality)
+        const durationSec = parseInt(duration);
+        const clipCount = Math.ceil(durationSec / 8);
+        const planPrompt = `You are an expert AI video production planner specialized in Google Veo 3.1.
+
+Create a detailed production plan for: "${fullDesc}"
+Total duration: ${durationSec}s, ${clipCount} clips (each 8s).
+
+${gemini.buildClipJsonSchema(clipCount)}
+
+${gemini.buildLanguageRules(langFormat || 'VN')}
+
+Return ONLY the JSON, no markdown formatting, no code blocks.`;
+
+        const opusPlan = await aiProvider.generateText(
+            req.user?.id,
+            'You are an expert AI video production planner. Create cinematic, detailed video plans with rich prompts.',
+            planPrompt,
+            { jsonMode: true, maxTokens: 16384 }
+        );
+        if (opusPlan.text && opusPlan.provider !== 'gemini-fallback') {
+            console.log(`[analyze-text] Using ${opusPlan.provider} (model: ${opusPlan.model || 'unknown'})`);
+            try { plan = gemini.parseJsonResponse(opusPlan.text); } catch (e) { plan = null; }
+            if (plan) plan._promptProvider = `Claude Opus (${opusPlan.model || 'ultra/claude-opus-4-6'})`;
+        }
+        // Use Gemini 3.1 Pro directly
+        if (!plan) {
+            plan = await gemini.generatePlan(fullDesc, durationSec, langFormat || 'VN', preset);
+            plan._promptProvider = 'Gemini 3.1 Pro';
+        }
+
+        // Add branding
+        plan.created_by = 'duonghy93';
 
         const projectName = plan.project_name || 'text_project';
         const planDir = path.join(outputDir, projectName + '_' + Date.now());
@@ -1208,6 +1571,7 @@ app.post('/api/analyze-text', auth.optionalAuth || ((req, res, next) => next()),
         if (history[userId].length > 30) history[userId] = history[userId].slice(0, 30);
         writeJsonFile(HISTORY_FILE, history);
 
+        notify.send(`📋 *Tạo Kế Hoạch Video*\n👤 User: ${req.user?.username || 'anonymous'}\n📝 Mô tả: ${description.substring(0, 80)}...\n⏱ Thời lượng: ${duration}s | 🎬 Clips: ${plan.clips?.length || 0}${req.body.channelName ? `\n📺 Kênh: ${req.body.channelName}` : ''}`);
         res.json({ success: true, plan, outputDir: planDir });
     } catch (error) {
         console.error('[analyze-text] Error:', error.message);
@@ -1545,6 +1909,7 @@ app.post('/api/chat', auth.authMiddleware, chatUpload.single('file'), async (req
         const convId = req.body.convId;
         const file = req.file;
         if (!message && !file) return res.status(400).json({ error: 'Message or file required' });
+        notify.chatMessage(req.user?.username, '', (message || 'File upload').substring(0, 60));
 
         const all = getUserChats(req.user.id);
         let conv;
@@ -1619,7 +1984,7 @@ Trả lời chi tiết, có cấu trúc rõ ràng (dùng heading, bullet, number
         const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-pro',
             systemInstruction: systemPrompt,
-            tools: [{ googleSearch: {} }]
+            tools: [{ googleSearch: {} }, { urlContext: {} }]
         });
 
         // Build message parts (text + optional file)
@@ -1688,7 +2053,7 @@ app.get('/api/admin/chat-logs', auth.authMiddleware, (req, res) => {
 });
 
 // POST /api/generate-image
-app.post('/api/generate-image', async (req, res) => {
+app.post('/api/generate-image', auth.optionalAuth || ((req, res, next) => next()), async (req, res) => {
     try {
         const { prompt, clipId, engine, aspectRatio, projectDir } = req.body;
         if (!prompt) {
@@ -1702,13 +2067,27 @@ app.post('/api/generate-image', async (req, res) => {
         const outputPath = path.join(dir, filename);
         const ar = aspectRatio || '9:16';
 
-        console.log(`[generate-image] Engine: ${engine || 'gemini'}, AR: ${ar}, Clip: ${clipId}`);
+        const userId = req.user?.id;
+        console.log(`[generate-image] Engine: ${engine || 'auto'}, AR: ${ar}, Clip: ${clipId}`);
 
         let result;
         if (engine === 'imagen') {
             result = await gemini.generateImageImagen(prompt, outputPath, ar);
-        } else {
+        } else if (engine === 'gemini') {
             result = await gemini.generateImage(prompt, outputPath, ar);
+        } else if (engine === 'flux') {
+            // Explicit Flux Pro — no fallback
+            result = await aiProvider.generateImage(userId, prompt, outputPath, ar);
+            if (result.provider === 'gemini-fallback') {
+                return res.status(400).json({ error: 'Cần nhập Fal.ai API Key để dùng Flux Pro' });
+            }
+        } else {
+            // Auto mode: try ai-provider first (Flux Pro > Gemini Image Vertex), then fallback to gemini
+            result = await aiProvider.generateImage(userId, prompt, outputPath, ar);
+            if (!result.success || result.provider === 'gemini-fallback') {
+                console.log('[generate-image] ai-provider fallback → gemini');
+                result = await gemini.generateImage(prompt, outputPath, ar);
+            }
         }
 
         if (result.success) {
@@ -1733,7 +2112,9 @@ app.post('/api/generate-image', async (req, res) => {
             }
 
             const relativePath = path.relative(__dirname, result.path).replace(/\\/g, '/');
-            res.json({ success: true, imagePath: '/' + relativePath, fullPath: result.path });
+            const providerLabel = { 'flux-pro': 'Flux Pro', 'gemini-image-vertex': 'Gemini Image (Vertex)', 'gemini-fallback': 'Gemini' };
+            notify.imageGenerated(req.user?.username || 'anonymous', providerLabel[result.provider] || result.provider || 'Gemini', prompt);
+            res.json({ success: true, imagePath: '/' + relativePath, fullPath: result.path, imageProvider: providerLabel[result.provider] || result.provider || 'Gemini' });
         } else {
             res.status(500).json({ error: result.error });
         }
@@ -1806,7 +2187,7 @@ app.get('/api/download-image', (req, res) => {
 });
 
 // POST /api/generate-all
-app.post('/api/generate-all', async (req, res) => {
+app.post('/api/generate-all', auth.optionalAuth || ((req, res, next) => next()), async (req, res) => {
     try {
         const { clips, engine, projectDir } = req.body;
         if (!clips || !clips.length) {
@@ -1816,7 +2197,8 @@ app.post('/api/generate-all', async (req, res) => {
         const dir = projectDir || path.join(outputDir, 'project_' + Date.now());
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-        console.log(`[generate-all] Generating ${clips.length} images with ${engine || 'gemini'}`);
+        const userId = req.user?.id;
+        console.log(`[generate-all] Generating ${clips.length} images with ${engine || 'auto'}`);
 
         const results = [];
         for (const clip of clips) {
@@ -1825,8 +2207,14 @@ app.post('/api/generate-all', async (req, res) => {
                 let result;
                 if (engine === 'imagen') {
                     result = await gemini.generateImageImagen(clip.reference_image_prompt, outputPath);
-                } else {
+                } else if (engine === 'gemini') {
                     result = await gemini.generateImage(clip.reference_image_prompt, outputPath);
+                } else {
+                    // Auto: Flux Pro > Gemini Image Vertex > Gemini free
+                    result = await aiProvider.generateImage(userId, clip.reference_image_prompt, outputPath);
+                    if (!result.success || result.provider === 'gemini-fallback') {
+                        result = await gemini.generateImage(clip.reference_image_prompt, outputPath);
+                    }
                 }
 
                 if (result.success) {
@@ -1840,6 +2228,8 @@ app.post('/api/generate-all', async (req, res) => {
             }
         }
 
+        const successCount = results.filter(r => r.success).length;
+        notify.planGenerated(req.user?.username || 'anonymous', `Batch: ${successCount}/${clips.length} images`);
         res.json({ success: true, results, outputDir: dir });
     } catch (error) {
         console.error('[generate-all] Error:', error.message);
@@ -1879,6 +2269,7 @@ app.post('/api/review-video', auth.authMiddleware, upload.single('video'), async
         if (rHist[userId].length > 30) rHist[userId] = rHist[userId].slice(0, 30);
         writeJsonFile(REVIEW_HISTORY_FILE, rHist);
 
+        notify.videoReviewed(req.user?.username || 'anonymous', req.file.originalname);
         res.json({ success: true, review, outputDir: reviewDir });
     } catch (error) {
         console.error('[review-video] Error:', error.message);
@@ -1887,6 +2278,51 @@ app.post('/api/review-video', auth.authMiddleware, upload.single('video'), async
 });
 
 // ============ ANALYSIS & REVIEW HISTORY ============
+
+// POST /api/review-video-url — Review video from URL (YouTube, TikTok, etc.)
+app.post('/api/review-video-url', auth.authMiddleware, async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'Missing video URL' });
+
+        console.log(`[review-video-url] Downloading from: ${url}`);
+        const videoBuffer = await downloadVideoFromUrl(url);
+        console.log(`[review-video-url] Downloaded: ${(videoBuffer.length / 1024 / 1024).toFixed(1)}MB`);
+
+        console.log(`[review-video-url] Starting AI review...`);
+        const review = await gemini.reviewVideo(videoBuffer, 'video/mp4');
+
+        const reviewDir = path.join(outputDir, 'review_' + Date.now());
+        fs.mkdirSync(reviewDir, { recursive: true });
+        fs.writeFileSync(path.join(reviewDir, 'review.json'), JSON.stringify(review, null, 2));
+
+        // Save to review history with URL
+        const userId = req.user?.id || 'anonymous';
+        let rHist = readJsonFile(REVIEW_HISTORY_FILE);
+        if (Array.isArray(rHist) || !rHist) rHist = {};
+        if (!rHist[userId]) rHist[userId] = [];
+        rHist[userId].unshift({
+            id: 'rh_' + Date.now().toString(36),
+            filename: url,
+            sourceUrl: url,
+            fileSize: videoBuffer.length,
+            overallScore: review.overall_score || review.overallScore || null,
+            summary: (review.summary || review.overall_assessment || '').substring(0, 200),
+            review: review,
+            createdAt: new Date().toISOString()
+        });
+        if (rHist[userId].length > 30) rHist[userId] = rHist[userId].slice(0, 30);
+        writeJsonFile(REVIEW_HISTORY_FILE, rHist);
+
+        notify.videoReviewed(req.user?.username || 'anonymous', url);
+        res.json({ success: true, review, outputDir: reviewDir });
+    } catch (error) {
+        console.error('[review-video-url] Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
 app.get('/api/analysis-history', auth.authMiddleware, (req, res) => {
     const userId = req.user?.id || 'anonymous';
     let hist = readJsonFile(ANALYSIS_HISTORY_FILE);
@@ -2066,7 +2502,11 @@ app.post('/api/characters/:id/generate-image', auth.authMiddleware, async (req, 
         if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
         const outputPath = path.join(imgDir, `${char.id}_${Date.now()}`);
 
-        const result = await gemini.generateImage(prompt, outputPath);
+        // Try ai-provider first (Flux Pro), fallback to gemini
+        let result = await aiProvider.generateImage(req.user?.id, prompt, outputPath);
+        if (!result.success || result.provider === 'gemini-fallback') {
+            result = await gemini.generateImage(prompt, outputPath);
+        }
         if (!result.success) return res.status(500).json({ error: result.error });
 
         const relativePath = '/' + path.relative(__dirname, result.path).replace(/\\/g, '/');

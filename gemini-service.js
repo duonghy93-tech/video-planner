@@ -10,7 +10,7 @@ const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
 
 // ============ MODELS ============
 const flashModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-const proModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+const proModel = genAI.getGenerativeModel({ model: 'gemini-3.1-pro-preview' });
 
 // ============ RETRY HELPER ============
 async function retryGenerate(model, content, maxRetries = 3) {
@@ -893,5 +893,10 @@ module.exports = {
     reviewVideo,
     generateRoadmap,
     generateNextRoadmap,
-    strategyChat
+    strategyChat,
+    // Exported helpers for ai-provider
+    buildClipJsonSchema,
+    buildLanguageRules,
+    parseJsonResponse,
+    safeJsonParse,
 };

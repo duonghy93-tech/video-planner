@@ -125,6 +125,32 @@ async function checkApiStatus() {
     const statusEl = document.getElementById('apiStatus');
     const dot = statusEl.querySelector('.status-dot');
     const text = statusEl.querySelector('.status-text');
+
+    // Check server-side keys first
+    try {
+        const token = localStorage.getItem('token');
+        if (token) {
+            const res = await fetch('/api/user/provider-status', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                const hasGemini = data.status?.gemini?.available;
+                const warnings = data.warnings || [];
+                if (hasGemini && warnings.length === 0) {
+                    dot.className = 'status-dot active';
+                    text.textContent = 'API sẵn sàng';
+                    return;
+                } else if (hasGemini) {
+                    dot.className = 'status-dot active';
+                    text.textContent = `API OK (${warnings.length} cảnh báo)`;
+                    return;
+                }
+            }
+        }
+    } catch (e) { /* fallback to localStorage check */ }
+
+    // Fallback: check localStorage
     const hasKey = !!getStoredApiKey();
     if (hasKey) {
         dot.className = 'status-dot active';
@@ -150,6 +176,7 @@ function switchTab(tabName) {
     if (tabName === 'text') { loadHistory(); loadTemplates(); loadChannelsForGenerator(); }
     if (tabName === 'video') { loadAnalysisHistory(); }
     if (tabName === 'review') { loadReviewHistory(); }
+    if (tabName === 'download' && typeof loadDownloadHistory === 'function') { loadDownloadHistory(); }
     if (tabName === 'profile') { loadProfile(); }
     if (tabName === 'channels') { renderUserCharts(); }
 }
@@ -436,11 +463,15 @@ async function loadAnalysisHistory() {
             const size = h.fileSize ? (h.fileSize / 1024 / 1024).toFixed(1) + 'MB' : '';
             const hasData = h.plan ? 'cursor:pointer' : '';
             const isDNA = h.type === 'dna';
-            const label = isDNA ? `🧬 ${h.title || h.filename || 'DNA Video'}` : `📹 ${h.filename || h.projectName || 'Video'}`;
+            const displayName = h.sourceUrl
+                ? '🔗 ' + h.sourceUrl.replace(/^https?:\/\//, '').substring(0, 45) + (h.sourceUrl.length > 55 ? '...' : '')
+                : (h.filename || h.projectName || 'Video');
+            const label = isDNA ? `🧬 ${h.title || displayName}` : `📹 ${displayName}`;
             const scoreTxt = isDNA && h.overallScore ? ` ⭐${h.overallScore}/100` : '';
             return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;${hasData};transition:all 0.2s" ${h.plan ? `onclick="viewAnalysisHistoryItem(${idx})" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'"` : ''}>
                 <div>
                     <div style="font-size:0.8rem;color:var(--text-primary)">${label}${scoreTxt} ${h.plan ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
+                    ${h.sourceUrl ? '<div style="font-size:0.6rem;margin-top:1px"><a href="' + h.sourceUrl + '" target="_blank" onclick="event.stopPropagation()" style="color:var(--accent-blue);text-decoration:none;opacity:0.7">🔗 Mở video gốc</a></div>' : ''}
                     <div style="font-size:0.65rem;color:var(--text-secondary)">${h.clipCount ? h.clipCount + ' clips • ' : ''}${size} • ${timeStr}</div>
                 </div>
                 <button onclick="event.stopPropagation();deleteAnalysisHistoryItem('${h.id}')" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.7rem;opacity:0.5;padding:2px 4px" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.5';this.style.color='var(--text-secondary)'" title="Xóa">✕</button>
@@ -455,11 +486,13 @@ function viewAnalysisHistoryItem(idx) {
     const item = items[idx];
     if (item.type === 'dna') {
         currentDNA = item.plan;
+        if (item.sourceUrl) currentDNA._sourceUrl = item.sourceUrl;
         renderDNAResults(currentDNA, 'dnaResults');
         const el = document.getElementById('dnaResults');
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
         currentPlan = item.plan;
+        if (item.sourceUrl) currentPlan._sourceUrl = item.sourceUrl;
         renderPlan(currentPlan, 'videoResults');
         const resultsEl = document.getElementById('videoResults');
         if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -495,7 +528,8 @@ async function loadReviewHistory() {
             const hasData = h.review ? 'cursor:pointer' : '';
             return `<div style="padding:8px 12px;background:rgba(0,0,0,0.15);border-radius:8px;border:1px solid rgba(139,92,246,0.1);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;${hasData};transition:all 0.2s" ${h.review ? `onclick="viewReviewHistoryItem(${idx})" onmouseover="this.style.borderColor='rgba(139,92,246,0.4)'" onmouseout="this.style.borderColor='rgba(139,92,246,0.1)'"` : ''}>
                 <div>
-                    <div style="font-size:0.8rem;color:var(--text-primary)">⭐ ${h.filename || 'Video'} ${score} ${h.review ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
+                    <div style="font-size:0.8rem;color:var(--text-primary)">⭐ ${h.sourceUrl ? '🔗 ' + h.sourceUrl.replace(/^https?:\/\//, '').substring(0, 40) + (h.sourceUrl.length > 50 ? '...' : '') : h.filename || 'Video'} ${score} ${h.review ? '<span style="font-size:0.65rem;color:var(--accent-purple)">▶ Click để xem</span>' : ''}</div>
+                    ${h.sourceUrl ? '<div style="font-size:0.6rem;margin-top:1px"><a href="' + h.sourceUrl + '" target="_blank" onclick="event.stopPropagation()" style="color:var(--accent-blue);text-decoration:none;opacity:0.7">🔗 Mở video gốc</a></div>' : ''}
                     <div style="font-size:0.65rem;color:var(--text-secondary)">${size} • ${timeStr}</div>
                     ${h.summary ? `<div style="font-size:0.65rem;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px">${h.summary}</div>` : ''}
                 </div>
@@ -509,6 +543,7 @@ function viewReviewHistoryItem(idx) {
     const items = window._reviewHistoryItems;
     if (!items || !items[idx] || !items[idx].review) { showToast('⚠️ Không có dữ liệu đánh giá'); return; }
     currentReview = items[idx].review;
+    if (items[idx].sourceUrl) currentReview._sourceUrl = items[idx].sourceUrl;
     renderReview(currentReview, 'reviewResultsSection');
     const resultsEl = document.getElementById('reviewResultsSection');
     if (resultsEl) resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -579,6 +614,7 @@ async function handleUrlAnalyze() {
 
         currentPlan = data.plan;
         currentPlan._outputDir = data.outputDir;
+        currentPlan._sourceUrl = url;
         renderPlan(currentPlan, 'videoResults');
         showToast('✅ Phân tích video từ URL thành công!');
     } catch (err) {
@@ -617,6 +653,40 @@ async function handleVideoReview() {
     }
 }
 
+// ============ HANDLER: REVIEW BY URL ============
+async function handleReviewUrl() {
+    const url = document.getElementById('reviewUrlInput').value.trim();
+    if (!url) {
+        showToast('⚠️ Vui lòng nhập link video');
+        return;
+    }
+
+    showLoading('Đang tải video từ URL và đánh giá...', 'Có thể mất 1-3 phút tùy kích thước video');
+
+    try {
+        const res = await fetch('/api/review-video-url', {
+            method: 'POST',
+            headers: getApiHeaders(),
+            body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        currentReview = data.review;
+        currentReview._sourceUrl = url;
+        renderReview(currentReview, 'reviewResultsSection');
+        showToast('✅ Đánh giá video từ URL hoàn tất!');
+        // Clear URL input
+        document.getElementById('reviewUrlInput').value = '';
+        document.getElementById('btnReviewUrl').disabled = true;
+    } catch (err) {
+        showToast('❌ Lỗi: ' + err.message);
+    } finally {
+        hideLoading();
+    }
+}
+
 // ============ RENDER PLAN ============
 function renderPlan(plan, targetId) {
     const section = document.getElementById(targetId);
@@ -634,6 +704,23 @@ function renderPlan(plan, targetId) {
                 <button class="btn-primary btn-sm" onclick="handleGenerateAllImages()">🖼️ Tạo Tất Cả Ảnh</button>
             </div>
         </div>`;
+
+    // Provider badges + branding
+    const promptBadge = plan._promptProvider === 'Claude Opus'
+        ? '🧠 <span style="color:#9b59b6;font-weight:600">Prompt by Claude Opus</span>'
+        : '💎 <span style="color:#4285f4;font-weight:600">Prompt by Gemini</span>';
+    html += `<div style="display:flex;align-items:center;gap:12px;margin:-4px 0 12px;padding:8px 14px;background:rgba(0,0,0,0.03);border-radius:10px;font-size:0.82rem;flex-wrap:wrap">
+        ${promptBadge}
+        <span style="opacity:0.3">|</span>
+        <span style="opacity:0.6">Created by <strong>duonghy93</strong></span>
+    </div>`;
+
+    // Source URL
+    if (plan._sourceUrl) {
+        html += `<div style="margin:-8px 0 12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;border:1px solid rgba(59,130,246,0.2)">
+            <a href="${plan._sourceUrl}" target="_blank" style="color:var(--accent-blue);text-decoration:none;font-size:0.85rem">🔗 ${plan._sourceUrl}</a>
+        </div>`;
+    }
 
     // Style guide
     if (plan.style_guide) {
@@ -889,6 +976,7 @@ function renderReview(review, targetId) {
                 ${score}
             </div>
             <div class="score-label">Điểm Tổng / 100</div>
+            ${review._sourceUrl ? `<div style="margin-top:8px"><a href="${review._sourceUrl}" target="_blank" style="color:var(--accent-blue);text-decoration:none;font-size:0.85rem">🔗 ${review._sourceUrl}</a></div>` : ''}
             ${review.summary ? `<p class="review-summary">${review.summary}</p>` : ''}
         </div>`;
 
@@ -1014,11 +1102,12 @@ async function handleGenerateCharacterImage(charId, charIndex, prompt) {
 
         container.innerHTML = `
             <img src="${data.imagePath}" alt="${charId}" class="char-img" loading="lazy">
+            <div style="font-size:0.7rem;color:var(--text-muted);padding:2px 0">🎨 ${data.imageProvider || 'Gemini'}</div>
             <div class="img-overlay-actions" style="opacity:1;position:relative;background:none;padding:4px 0 0 0;">
                 <button class="btn-img-action" style="background:var(--border)" onclick="downloadImage('${data.imagePath}', 'character_${charId}')">📥 Tải</button>
                 <button class="btn-img-action" style="background:var(--border)" onclick="handleGenerateCharacterImage('${charId}', ${charIndex}, \`${prompt.replace(/`/g, "'")}\`)">🔄 Tạo lại</button>
             </div>`;
-        showToast(`✅ Đã tạo ảnh nhân vật ${charId}`);
+        showToast(`✅ Đã tạo ảnh nhân vật ${charId} (${data.imageProvider || 'Gemini'})`);
     } catch (err) {
         container.innerHTML = `
             <div class="char-img-placeholder">
@@ -1071,6 +1160,7 @@ async function handleGenerateSingleImage(clipId, index) {
             <img src="${imgSrc}" alt="${clipId}" loading="lazy" onload="this.parentElement.querySelector('.img-size-info').textContent = this.naturalWidth + ' × ' + this.naturalHeight + 'px'">
             <div class="img-overlay-actions">
                 <span class="img-size-info" style="font-size:0.7rem;color:var(--text-muted);background:rgba(0,0,0,0.6);padding:2px 8px;border-radius:4px">Loading...</span>
+                <span style="font-size:0.65rem;color:var(--text-muted);background:rgba(0,0,0,0.5);padding:2px 6px;border-radius:4px">🎨 ${data.imageProvider || 'Gemini'}</span>
                 <div class="img-action-buttons">
                     <button class="btn-img-action" title="Tải ảnh Full HD" onclick="downloadImage('${imgSrc}', '${clipId}')">
                         📥 Tải
@@ -1080,7 +1170,7 @@ async function handleGenerateSingleImage(clipId, index) {
                     </button>
                 </div>
             </div>`;
-        showToast(`✅ Đã tạo ảnh cho ${clipId}`);
+        showToast(`✅ Đã tạo ảnh cho ${clipId} (${data.imageProvider || 'Gemini'})`);
     } catch (err) {
         container.innerHTML = `
             <div class="clip-image-placeholder">
@@ -1142,8 +1232,9 @@ async function handleGenerateRefImage(clipId, index, refType) {
                 <button class="btn-img-action-sm" onclick="downloadImage('${imgSrc}', '${clipId}_opening')" title="Tải">📥 Tải</button>
                 <button class="btn-img-action-sm" onclick="handleUpscaleImage('${clipId}', ${index}, '${imgSrc}')" title="Upscale">🔍 Upscale</button>
                 <button class="btn-img-action-sm" onclick="handleGenerateRefImage('${clipId}', ${index}, 'start')" title="Tạo lại">🔄 Lại</button>
+                <span style="font-size:0.65rem;color:var(--text-muted)">🎨 ${data.imageProvider || 'Gemini'}</span>
             </div>`;
-        showToast(`✅ Ảnh opening frame cho ${clipId} `);
+        showToast(`✅ Ảnh opening frame cho ${clipId} (${data.imageProvider || 'Gemini'})`);
     } catch (err) {
         container.innerHTML = `
         <div style="aspect-ratio:9/16;max-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;border:2px dashed var(--accent-red)">
@@ -1348,31 +1439,94 @@ function downloadReviewJson() {
 // ============ API KEY MODAL ============
 function toggleApiKeyModal() {
     const modal = document.getElementById('apiKeyModal');
+    const isOpening = !modal.classList.contains('active');
     modal.classList.toggle('active');
+
+    if (isOpening) {
+        loadApiKeyStatus();
+    }
 }
 
-async function saveApiKey() {
-    const geminiKey = document.getElementById('apiKeyInput').value.trim();
-    const youtubeKey = document.getElementById('youtubeApiKeyInput')?.value?.trim();
+async function loadApiKeyStatus() {
+    try {
+        // Load current keys
+        const res = await fetch('/api/user/api-keys', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (res.ok) {
+            const data = await res.json();
+            const keys = data.keys || {};
+            // Show masked keys as placeholders
+            if (keys.GEMINI_API_KEY) document.getElementById('keyGemini').placeholder = 'Đã lưu: ' + keys.GEMINI_API_KEY;
+            if (keys.VERTEX_KEY_API_KEY) document.getElementById('keyVertexKey').placeholder = 'Đã lưu: ' + keys.VERTEX_KEY_API_KEY;
+            if (keys.FAL_KEY) document.getElementById('keyFal').placeholder = 'Đã lưu: ' + keys.FAL_KEY;
+        }
 
-    if (geminiKey && geminiKey.length >= 10) {
-        setStoredApiKey(geminiKey);
-    }
+        // Load warnings
+        const wRes = await fetch('/api/user/provider-status', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (wRes.ok) {
+            const wData = await wRes.json();
+            const warningsEl = document.getElementById('apiKeyWarnings');
+            if (wData.warnings?.length) {
+                warningsEl.innerHTML = wData.warnings.map(w =>
+                    `<div style="padding:8px 12px;margin-bottom:6px;border-radius:8px;font-size:0.8rem;
+                        background:${w.type === 'error' ? 'rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444' : 'rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#f59e0b'}">
+                        ${w.message}
+                    </div>`
+                ).join('');
+            } else {
+                warningsEl.innerHTML = '<div style="padding:8px 12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;font-size:0.8rem;color:#10b981">✅ Tất cả API keys đã được cấu hình!</div>';
+            }
+        }
 
-    // Save YouTube API key to server
-    if (youtubeKey) {
-        try {
+        // Load YouTube key status
+        const ytRes = await fetch('/api/settings/youtube-key', { headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+        if (ytRes.ok) {
+            const ytData = await ytRes.json();
+            if (ytData.hasKey) document.getElementById('keyYoutube').placeholder = 'Đã lưu: ' + ytData.key;
+        }
+    } catch (e) { console.error('loadApiKeyStatus error:', e); }
+}
+
+async function saveAllApiKeys() {
+    const geminiKey = document.getElementById('keyGemini').value.trim();
+    const vertexKey = document.getElementById('keyVertexKey').value.trim();
+    const falKey = document.getElementById('keyFal').value.trim();
+    const youtubeKey = document.getElementById('keyYoutube').value.trim();
+
+    // Build keys object (only non-empty)
+    const keys = {};
+    if (geminiKey) keys.GEMINI_API_KEY = geminiKey;
+    if (vertexKey) keys.VERTEX_KEY_API_KEY = vertexKey;
+    if (falKey) keys.FAL_KEY = falKey;
+
+    // Save to server
+    try {
+        if (Object.keys(keys).length > 0) {
+            const res = await fetch('/api/user/api-keys', {
+                method: 'POST',
+                headers: getApiHeaders(),
+                body: JSON.stringify({ keys })
+            });
+            if (!res.ok) throw new Error('Failed to save keys');
+        }
+
+        // Legacy: also save Gemini key to localStorage for backward compat
+        if (geminiKey) setStoredApiKey(geminiKey);
+
+        // Save YouTube key separately
+        if (youtubeKey) {
             await fetch('/api/settings/youtube-key', {
                 method: 'POST',
                 headers: getApiHeaders(),
                 body: JSON.stringify({ key: youtubeKey })
             });
-        } catch (e) { console.error('Failed to save YouTube key'); }
-    }
+        }
 
-    showToast('\u2705 API Keys \u0111\u00e3 \u0111\u01b0\u1ee3c l\u01b0u!');
-    toggleApiKeyModal();
-    checkApiStatus();
+        showToast('✅ API Keys đã được lưu!');
+        toggleApiKeyModal();
+        checkApiStatus();
+    } catch (e) {
+        showToast('❌ Lỗi khi lưu: ' + e.message);
+    }
 }
 
 // ============ DNA ANALYSIS HANDLERS ============
@@ -1428,6 +1582,7 @@ async function handleDNAUrlAnalyze() {
         if (!res.ok) throw new Error(data.error);
 
         currentDNA = data.dna;
+        currentDNA._sourceUrl = url;
         renderDNAResults(currentDNA, 'dnaResults');
         showToast('✅ Phân tích DNA từ URL thành công!');
     } catch (err) {
@@ -1456,6 +1611,13 @@ function renderDNAResults(dna, targetId) {
                 <button class="btn-secondary" onclick="copyDNAJson()">📋 Copy JSON</button>
             </div>
         </div>`;
+
+    // Source URL
+    if (dna._sourceUrl) {
+        html += `<div style="margin:-8px 0 12px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:8px;border:1px solid rgba(59,130,246,0.2)">
+            <a href="${dna._sourceUrl}" target="_blank" style="color:var(--accent-blue);text-decoration:none;font-size:0.85rem">🔗 ${dna._sourceUrl}</a>
+        </div>`;
+    }
 
     // Score cards row
     html += `
@@ -1771,10 +1933,41 @@ async function saveCustomPreset() {
     }
 }
 
+function editPreset(id) {
+    const preset = savedPresets.find(p => p.id === id);
+    if (!preset) return;
+
+    // Load data into form
+    const nameInput = document.getElementById('customPresetName');
+    const rulesInput = document.getElementById('customPresetRules');
+    const chSelect = document.getElementById('customPresetChannel');
+
+    nameInput.value = preset.name || '';
+    rulesInput.value = preset.data?.custom_rules || '';
+    if (chSelect && preset.channelId) {
+        chSelect.value = preset.channelId;
+    }
+
+    // Delete old preset silently
+    fetch('/api/presets/' + id, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+    }).then(() => loadPresets()).then(() => openPresetManager());
+
+    // Scroll to form
+    nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    nameInput.focus();
+    showToast('✏️ Đang sửa preset — chỉnh xong bấm "Lưu Custom Preset"');
+}
+
 async function deletePreset(id) {
     if (!confirm('Xóa preset này?')) return;
     try {
-        await fetch('/api/presets/' + id, { method: 'DELETE' });
+        const res = await fetch('/api/presets/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Lỗi xóa preset'); }
         showToast('🗑️ Đã xóa preset');
         await loadPresets();
         openPresetManager(); // refresh
@@ -1818,7 +2011,10 @@ function openPresetManager() {
                                 ${isCustom ? `<div class="preset-list-style">📋 ${d.custom_rules.substring(0, 100)}...</div>` : ''}
                                 ${!isCustom && d.style_dna?.overall_style ? `<div class="preset-list-style">🎨 ${d.style_dna.overall_style.substring(0, 80)}...</div>` : ''}
                             </div>
-                            <button class="btn-ghost btn-danger" onclick="deletePreset('${p.id}')">🗑️</button>
+                            <div style="display:flex;gap:4px">
+                                ${isCustom ? `<button class="btn-ghost" onclick="editPreset('${p.id}')" title="Sửa preset" style="color:var(--accent-blue)">✏️</button>` : ''}
+                                <button class="btn-ghost btn-danger" onclick="deletePreset('${p.id}')">🗑️</button>
+                            </div>
                         </div>`;
         }).join('')}
             </div>`;
@@ -1982,7 +2178,11 @@ async function saveSingleCharFromDNA(index) {
 async function deleteCharacter(id) {
     if (!confirm('Xóa nhân vật này?')) return;
     try {
-        await fetch('/api/characters/' + id, { method: 'DELETE' });
+        const res = await fetch('/api/characters/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + getAuthToken() }
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Lỗi xóa nhân vật'); }
         showToast('✅ Đã xóa nhân vật');
         await loadCharacters();
         openCharacterLibrary(); // refresh
@@ -2490,6 +2690,7 @@ function renderRoadmap() {
             <button class="btn-dna-save btn-sm" onclick="generateNextWeek()">\u27a1\ufe0f Tu\u1ea7n ti\u1ebfp theo</button>
         </div>
     </div>`;
+
 
     if (rm.weekly_strategy) {
         html += `<div class="dna-card" style="margin-bottom:16px;border-left:3px solid var(--accent-purple)">
@@ -3049,6 +3250,13 @@ function adminViewFullDetail(key, type) {
         const review = data.review || data;
         title.textContent = '⭐ Review: ' + (data.filename || 'Video');
         let html = '<div style="max-width:700px;margin:0 auto">';
+
+        // Source URL
+        if (data.sourceUrl) {
+            html += `<div style="margin-bottom:12px;font-size:0.8rem"><a href="${data.sourceUrl}" target="_blank" style="color:var(--accent-blue);text-decoration:none">🔗 ${data.sourceUrl}</a></div>`;
+        }
+
+        // Overall Score
         if (review.overall_score || data.overallScore) {
             const score = review.overall_score || data.overallScore;
             html += `<div style="text-align:center;margin-bottom:20px">
@@ -3056,6 +3264,8 @@ function adminViewFullDetail(key, type) {
                 <div style="font-size:0.9rem;color:var(--text-secondary)">/ 100 điểm</div>
             </div>`;
         }
+
+        // Sub-scores
         if (review.hook_score || review.visual_score) {
             html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
                 <div class="dna-card" style="padding:10px;text-align:center"><div style="font-size:1.2rem;font-weight:600;color:#8b5cf6">${review.hook_score || '-'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Hook</div></div>
@@ -3064,17 +3274,73 @@ function adminViewFullDetail(key, type) {
                 <div class="dna-card" style="padding:10px;text-align:center"><div style="font-size:1.2rem;font-weight:600;color:#f59e0b">${review.pacing_score || '-'}</div><div style="font-size:0.7rem;color:var(--text-secondary)">Pacing</div></div>
             </div>`;
         }
-        if (review.strengths?.length) {
-            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 6px;color:#10b981">✅ Điểm mạnh</h4><ul style="margin:0;padding-left:18px">' + review.strengths.map(s => `<li style="margin:4px 0;font-size:0.85rem">${s}</li>`).join('') + '</ul></div>';
+
+        // Strengths
+        const strengths = review.strengths || [];
+        if (strengths.length) {
+            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 8px;color:#10b981">✅ Điểm mạnh</h4>';
+            html += strengths.map(s => {
+                if (typeof s === 'object') {
+                    return `<div style="margin:6px 0;padding:8px;background:rgba(16,185,129,0.05);border-radius:6px;border-left:3px solid #10b981">
+                        <div style="font-weight:600;font-size:0.85rem">${s.category || ''} ${s.score ? '<span style="color:#10b981">(' + s.score + '/10)</span>' : ''}</div>
+                        <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:2px">${s.detail || s.text || ''}</div>
+                    </div>`;
+                }
+                return `<div style="margin:4px 0;font-size:0.85rem;padding-left:8px">• ${s}</div>`;
+            }).join('');
+            html += '</div>';
         }
-        if (review.weaknesses?.length) {
-            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 6px;color:#f59e0b">⚠️ Điểm yếu</h4><ul style="margin:0;padding-left:18px">' + review.weaknesses.map(w => `<li style="margin:4px 0;font-size:0.85rem">${w}</li>`).join('') + '</ul></div>';
+
+        // Issues (NOT "weaknesses")
+        const issues = review.issues || review.weaknesses || [];
+        if (issues.length) {
+            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 8px;color:#ef4444">🔴 Điểm lỗi</h4>';
+            html += issues.map(issue => {
+                if (typeof issue === 'object') {
+                    return `<div style="margin:6px 0;padding:8px;background:rgba(239,68,68,0.05);border-radius:6px;border-left:3px solid ${issue.severity === 'critical' ? '#ef4444' : issue.severity === 'major' ? '#f59e0b' : '#6b7280'}">
+                        <div style="font-weight:600;font-size:0.85rem">${issue.category || ''} ${issue.severity ? '<span style="font-size:0.7rem;padding:1px 6px;border-radius:4px;background:' + (issue.severity === 'critical' ? 'rgba(239,68,68,0.15);color:#ef4444' : issue.severity === 'major' ? 'rgba(245,158,11,0.15);color:#f59e0b' : 'rgba(107,114,128,0.15);color:#6b7280') + '">' + issue.severity + '</span>' : ''}</div>
+                        <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:2px">${issue.detail || issue.text || ''}</div>
+                        ${issue.timestamp ? '<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px">⏱ ' + issue.timestamp + '</div>' : ''}
+                    </div>`;
+                }
+                return `<div style="margin:4px 0;font-size:0.85rem;padding-left:8px">• ${issue}</div>`;
+            }).join('');
+            html += '</div>';
         }
-        if (review.suggestions?.length) {
-            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 6px;color:#3b82f6">💡 Đề xuất</h4><ul style="margin:0;padding-left:18px">' + review.suggestions.map(s => `<li style="margin:4px 0;font-size:0.85rem">${s}</li>`).join('') + '</ul></div>';
+
+        // Solutions (NOT "suggestions")
+        const solutions = review.solutions || review.suggestions || [];
+        if (solutions.length) {
+            html += '<div class="dna-card" style="padding:12px;margin-bottom:8px"><h4 style="margin:0 0 8px;color:#3b82f6">🛠️ Giải pháp</h4>';
+            html += solutions.map(sol => {
+                if (typeof sol === 'object') {
+                    let solHtml = `<div style="margin:6px 0;padding:8px;background:rgba(59,130,246,0.05);border-radius:6px;border-left:3px solid #3b82f6">
+                        <div style="font-weight:600;font-size:0.85rem">${sol.issue_ref || sol.category || 'Gợi ý'}</div>
+                        <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:2px">${sol.detail || sol.text || sol.suggestion || ''}</div>`;
+                    if (sol.capcut_tip) solHtml += `<div style="font-size:0.78rem;color:var(--accent-cyan);margin-top:4px">✂️ CapCut: ${sol.capcut_tip}</div>`;
+                    if (sol.corrected_prompt) solHtml += `<div style="margin-top:6px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:6px;padding:8px"><div style="font-size:0.7rem;color:var(--accent-purple);font-weight:600;margin-bottom:4px">📝 PROMPT ĐÃ SỬA:</div><pre style="white-space:pre-wrap;color:var(--text-secondary);font-size:0.78rem;margin:0">${sol.corrected_prompt}</pre></div>`;
+                    solHtml += '</div>';
+                    return solHtml;
+                }
+                return `<div style="margin:4px 0;font-size:0.85rem;padding-left:8px">• ${sol}</div>`;
+            }).join('');
+            html += '</div>';
         }
-        if (review.summary) {
-            html += `<div class="dna-card" style="padding:12px"><h4 style="margin:0 0 6px">📝 Tóm tắt</h4><p style="font-size:0.85rem;color:var(--text-secondary);margin:0">${review.summary}</p></div>`;
+
+        // Verdict
+        if (review.verdict) {
+            const v = review.verdict;
+            html += `<div class="dna-card" style="padding:12px;margin-bottom:8px;border:1px solid rgba(139,92,246,0.3)">
+                <h4 style="margin:0 0 8px;color:var(--accent-purple)">⚖️ Kết luận</h4>
+                <div style="font-size:0.85rem">${v.usable ? '✅ Có thể sử dụng' : '❌ Cần sửa lại'} — ${v.rating || ''}</div>
+                ${v.best_use_case ? `<div style="font-size:0.8rem;color:var(--text-secondary);margin-top:4px">🎯 ${v.best_use_case}</div>` : ''}
+                ${v.similar_viral_style ? `<div style="font-size:0.8rem;color:var(--text-secondary);margin-top:4px">🔥 Style: ${v.similar_viral_style}</div>` : ''}
+            </div>`;
+        }
+
+        // Summary
+        if (review.summary || review.overall_assessment) {
+            html += `<div class="dna-card" style="padding:12px"><h4 style="margin:0 0 6px">📝 Tóm tắt</h4><p style="font-size:0.85rem;color:var(--text-secondary);margin:0;line-height:1.5">${review.summary || review.overall_assessment}</p></div>`;
         }
         html += '</div>';
         body.innerHTML = html;

@@ -1,5 +1,6 @@
 node_modules/
 output/
+downloads/
 data/
 .env
 yt-dlp.exe
